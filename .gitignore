@@ -3,3 +3,5 @@ dist/
 tools/delivery-test/dist*/
 tools/delivery-test/public/
 *.log
+tools/scratch/
+dist-single/
