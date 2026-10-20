@@ -33,6 +33,7 @@ export const SLICE_SHOTS: Record<string, ShotDef> = {
   '5': { title: 'Storefront window glow', time: 23.6, cam: { pos: [3.5, 1.9, 67], look: [-10, 2.6, 58.5], fov: 50 }, bike: { pos: [-3.2, 1, 61.5], yaw: 0.5 }, warm: 30 },
   '6': { title: 'Elevated lane at speed', time: 23.6, bike: { pos: [35, 11, 50], yaw: 0, speed: 30 }, bot: { pts: [[35, 50], [35, -96], [35, -140]] }, warm: 12, warmSec: 1.6 },
   '7': { title: 'Underpass at speed', time: 23.6, bike: { pos: [12.5, 1, -33], yaw: A, speed: 26 }, bot: { pts: [[12.5, -33], [60.7, -102.4], [70, -115]] }, warm: 12, warmSec: 1.45 },
+  '8': { title: 'Stacks street life (extra)', time: 23.6, cam: { pos: [-121, 2.2, 228], look: [-60, 6, 214], fov: 55 }, bike: { pos: [-112, 1, 222], yaw: -Math.PI / 2 }, warm: 30 },
 };
 export const SHOTS = new Proxy({} as Record<string, ShotDef>, {
   get: (_t, k: string) => ((window as any).__NC_WORLD === 'test' ? TEST_SHOTS : SLICE_SHOTS)[k],

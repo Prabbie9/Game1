@@ -21,6 +21,11 @@ import { Rain } from './fx/rain';
 import { GameAudio } from './audio/audio';
 import { UI, loadSettings, loadingScreen, type Settings } from './ui/ui';
 import { Bot } from './bot/bot';
+import { Occlusion } from './heat/occlusion';
+import { HeatSystem } from './heat/heat';
+import { NavUI } from './ui/nav';
+import { Career } from './jobs/career';
+import { JOBS } from './jobs/jobs';
 import { SHOTS, setupShot, saveReferenceShots } from './debug/shots';
 import type { WorldDef } from './world/defs';
 
@@ -86,7 +91,16 @@ async function boot() {
     onSettings: (s) => applySettings(s), onTuning: (t) => physics.setTuning(t), credits: CREDITS_HTML,
     onResume: () => { paused = false; physics.freeze(false); },
     onShots: () => saveReferenceShots(game),
+    garage: () => career?.garageMenu() ?? [], wallet: () => career?.save.credits ?? 0,
   });
+  // ---- core loop systems (jobs, heat, navigation) ----
+  const occ = new Occlusion(world);
+  const heat = new HeatSystem(scene, occ);
+  heat.onRoadblocks = (rb) => { if (rb) physics.addChunk('roadblock', rb.map((r) => ({ c: [r.x, 0.55, r.z] as [number, number, number], h: [1.8, 0.55, 0.3] as [number, number, number], yaw: r.yaw, mat: 'hazard' as const }))); else physics.removeChunk('roadblock'); };
+  const nav = new NavUI(ui.root, world, worldName === 'stacks' ? 360 : 260);
+  const career: Career | null = worldName === 'test' ? null : new Career(scene, world, nav, ui, heat, audio, tuning);
+  if (career) { career.onTuning = (t) => physics.setTuning(t); career.applyUpgrades(); ui.setCredits(career.save.credits); }
+  heat.onSpotted = () => { ui.toast('SPOTTED', 1.5); audio.blip(0.5); };
   const applySettings = (s: Settings) => {
     U.flicker.value = s.reduceFlicker ? 0 : 1;
     audio.musicOn = s.music; audio.volume = s.volume; if (audio.master) audio.master.gain.value = s.volume;
@@ -137,8 +151,9 @@ async function boot() {
     game,
     teleport: (x: number, y: number, z: number, yaw = 0, speed = 0) => physics.teleport(x, y, z, yaw, speed),
     setTime, setRain,
-    startJob: () => 'jobs arrive in M4',
-    setHeat: () => 'heat arrives in M4',
+    startJob: (id: string) => { const j = JOBS.find((x) => x.id === id); if (!j || !career) return 'unknown job: ' + JOBS.map((x) => x.id).join(', '); career.startJob(j); return 'started ' + id; },
+    setHeat: (h: number) => { heat.setHeat(h); return heat.heat; },
+    heat: () => ({ heat: heat.heat, meter: heat.meter, spotted: heat.spotted, exposure: heat.exposure, covered: heat.covered, pursuers: heat.pursuers.map((p) => p.kind) }),
     stats: () => game.stats(),
     tuning: () => JSON.stringify(tuning),
   };
@@ -152,25 +167,33 @@ async function boot() {
     t += dt; frames++;
     input.update();
     const a = input.state;
-    if (a.pressed.pause && !ui.tuningOpen) { if (ui.menuOpen) ui.closeMenu(); else { ui.openPause(); paused = true; physics.freeze(true); document.exitPointerLock?.(); } }
+    const careerOwns = career ? (nav.dialogOpen || nav.cardOpen) : false;
+    if (a.pressed.pause && !ui.tuningOpen && !careerOwns) { if (ui.menuOpen) ui.closeMenu(); else { ui.openPause(); paused = true; physics.freeze(true); document.exitPointerLock?.(); } }
     else if (a.pressed.pause && ui.tuningOpen) ui.toggleTuning(false);
     if (a.pressed.tuning) ui.toggleTuning();
+    if (a.pressed.map && !ui.menuOpen) nav.toggleMap();
     if (a.pressed.lights) { bike.lightsOn = !bike.lightsOn; ui.toast(bike.lightsOn ? 'LIGHTS ON' : 'LIGHTS OFF'); }
     ui.handle(a);
 
     let vin: VehicleInput = paused ? { throttle: 0, steer: 0, boost: false, drift: false, hopLeft: false, hopRight: false }
       : { throttle: a.axes.throttle, steer: a.axes.steer, boost: a.down.boost, drift: a.down.drift, hopLeft: a.pressed.hopLeft, hopRight: a.pressed.hopRight };
     if (bot && !paused) vin = bot.drive(simState, tuning);
+    const ev = physics.takeEvents();
+    if (career && !paused) {
+      const owns = career.update(dt, simState, a, ev, Math.atan2(-(cam.tx - cam.x), -(cam.tz - cam.z)), bike.lightsOn);
+      if (owns) vin = { throttle: 0, steer: 0, boost: false, drift: false, hopLeft: false, hopRight: false };
+      ui.setCredits(career.save.credits);
+    }
     physics.frame(dt, vin, { pivot: cam.pivot, dir: cam.dir, len: cam.want, bike: [simState.x, simState.y, simState.z] });
     if (physics.cur) simState = physics.cur;
     const pose = physics.pose();
-    const ev = physics.takeEvents();
     if (ev.boostStarted) { audio.boost(); shake = Math.max(shake, 0.25); }
     if (ev.impact > 2) { audio.impact(ev.impact); shake = Math.max(shake, Math.min(1, ev.impact / 12)); }
     if (ev.hopped) audio.hop();
     if (ev.landed > 3) audio.land(ev.landed);
     if (ev.driftReleased > 0) { audio.driftKick(); ui.toast('DRIFT BOOST', 0.8); }
 
+    nav.update({ x: simState.x, z: simState.z, yaw: simState.yaw }, Math.atan2(-(cam.tx - cam.x), -(cam.tz - cam.z)), career?.objective ?? null, career?.markers2D() ?? [], heat.heat, heat.meter, heat.seen);
     bike.update(pose, simState, dt);
     const look = input.consumeLook();
     const renderState = { ...simState, x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw };
@@ -206,6 +229,7 @@ async function boot() {
     const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
     audio.update({ speed: simState.speed, boosting: simState.boosting, drifting: simState.drifting, slip: simState.slip, grounded: simState.grounded,
       onWater: simState.surface === 'water', rain: rainAmt, covered, cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z, fx: fwd.x, fz: fwd.z },
+      tramAt: tram ? tram.pos : null,
       buzzAt: pool.lights[0] ? { x: pool.lights[0].position.x, y: pool.lights[0].position.y, z: pool.lights[0].position.z } : null });
     ui.hud(simState.speed, simState.boost, simState.boosting, simState.drifting ? simState.driftCharge : 0, dt, t);
     // speed-adaptive post: blur, DoF and CA ramp with speed so the frame stays readable when slow

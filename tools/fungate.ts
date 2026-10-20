@@ -4,6 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { RapierWorld } from '../src/physics/query';
 import { buildTestArea } from '../src/world/testarea';
 import { buildSlice } from '../src/world/slice';
+import { buildStacks } from '../src/world/stacks';
 import { createState, stepVehicle, SIM_DT, NO_INPUT, VehicleInput, VehicleState, teleport } from '../src/vehicle/sim';
 import { PRESETS } from '../src/vehicle/tuning';
 import { Bot } from '../src/bot/bot';
@@ -121,17 +122,20 @@ function spawn(x: number, z: number, yaw: number, y = 1) { const s = createState
 }
 // 7. every route in the look slice: completes, in band, no dead-stops, camera never clips
 {
-  const SW = buildSlice(); const qs = new RapierWorld(RAPIER); qs.addBoxes('slice', SW.boxes);
   const res: any = {};
-  for (const [name, R] of Object.entries(SW.routes)) {
+  for (const [wname, SW] of [['slice', buildSlice()], ['stacks', buildStacks()]] as const) {
+  const qs = new RapierWorld(RAPIER); qs.addBoxes(wname, SW.boxes);
+  for (const [rname, R] of Object.entries(SW.routes)) {
+    if (wname === 'stacks' && !['cross', 'ring'].includes(rname)) continue;
+    const name = wname + ':' + rname;
     const bot = new Bot({ pts: R.pts });
     const a = R.pts[0], b = R.pts[1];
-    const s = createState(a[0], name === 'skyway' ? 1 : 1, a[1], Math.atan2(-(b[0] - a[0]), -(b[1] - a[1])));
+    const s = createState(a[0], 1, a[1], Math.atan2(-(b[0] - a[0]), -(b[1] - a[1])));
     for (let i = 0; i < 120; i++) stepVehicle(s, NO_INPUT, T, qs);
     const cam = createChase(s);
     const castArm = (p: [number, number, number], d: [number, number, number], len: number) => Math.max(0.3, qs.castSphere(p[0], p[1], p[2], d[0], d[1], d[2], len, 0.3) - 0.05);
     let t = 0, clips = 0, deadStops = 0, lastImp = -9, impV = 0, minAfter = 99, maxStuck = 0, stuck = 0, acc = 0, water = 0, maxY = 0;
-    while (!bot.done && t < 200) {
+    while (!bot.done && t < 400) {
       stepVehicle(s, bot.drive(s, T), T, qs); t += SIM_DT;
       if (s.surface === 'water' && s.grounded) water += SIM_DT; maxY = Math.max(maxY, s.y);
       if (s.impact > 1 && t - lastImp > 0.6) { lastImp = t; impV = s.speed + s.impact; minAfter = 99; }
@@ -142,7 +146,28 @@ function spawn(x: number, z: number, yaw: number, y = 1) { const s = createState
     res[name] = { finished: bot.done, time: +t.toFixed(1), band: R.targetTime, deadStops, camClips: clips, maxStuck: +maxStuck.toFixed(1), waterSec: +water.toFixed(1), maxY: +maxY.toFixed(1),
       pass: bot.done && t >= R.targetTime[0] && t <= R.targetTime[1] && deadStops === 0 && clips === 0 };
   }
+  }
   out.sliceRoutes = { ...res, pass: Object.values(res).every((r: any) => r.pass) };
+}
+// 8. job routes: the bot must finish each authored job inside its time limit (not trivial: uses > 35% of it)
+{
+  const SW = buildStacks(); const qj = new RapierWorld(RAPIER); qj.addBoxes('j', SW.boxes);
+  const h = SW.anchors.hoshi!; const k: [number, number] = [h.pos[0] + Math.sin(h.yaw) * 4.5, h.pos[2] + Math.cos(h.yaw) * 4.5];
+  const bend = (await import('../src/world/slice')).streetPath(2).filter((p, i) => p.z < 0 && i % 4 === 0).map((p) => [p.x, p.z] as [number, number]);
+  const routes: Record<string, { pts: [number, number][]; limit: number }> = {
+    kiso_tram: { pts: [k, [0, k[1]], [0, 220], [-210, 220], [-210, 236]], limit: 34 },
+    kiso_ring: { pts: [k, [0, k[1]], [0, 2], ...bend, [60.7, -102.4], [100, -158], [100, -300], [294, -300], [294, -238], [288, -230], [250, -230], [200, -230]], limit: 60 },
+    dex_hound: { pts: [[290, -50], [270, -50], [270, 70], [190, 70], [190, 220], [0, 220], [0, 104]], limit: 170 },
+    volt_dark: { pts: [[-130, -172], [-130, 220], [-300, 220], [-300, 236]], limit: 150 },
+  };
+  const res: any = {};
+  for (const [name, r] of Object.entries(routes)) {
+    const bot = new Bot({ pts: r.pts }); const a = r.pts[0], b = r.pts[1];
+    const s = createState(a[0], 1, a[1], Math.atan2(-(b[0] - a[0]), -(b[1] - a[1]))); for (let i = 0; i < 120; i++) stepVehicle(s, NO_INPUT, T, qj);
+    let t = 0, dead = 0, lastImp = -9; while (!bot.done && t < 300) { stepVehicle(s, bot.drive(s, T), T, qj); t += SIM_DT; if (s.impact > 6 && t - lastImp > 0.6) { lastImp = t; dead++; } }
+    res[name] = { finished: bot.done, time: +t.toFixed(1), limit: r.limit, usedPct: Math.round(100 * t / r.limit), hardHits: dead, endY: +s.y.toFixed(1), pass: bot.done && t < r.limit && (name.startsWith('kiso') ? t > r.limit * 0.35 : true) }; // chase + dark limits include shaking / sneaking time
+  }
+  out.jobRoutes = { ...res, pass: Object.values(res).every((r: any) => r.pass) };
 }
 out.pass = Object.values(out).every((v: any) => typeof v !== 'object' || v.pass !== false);
 console.log(JSON.stringify(out, null, 1));

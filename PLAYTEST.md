@@ -52,3 +52,16 @@ Questions for a human (M2):
 3. Is skimming the canal fun, and was it obvious how to get in and out?
 4. The Skyway ramp and underpass: did the jump between street level and the elevated lane feel good?
 5. Do the engine, rain and city sounds match what you see? Anything grating?
+
+> **Correction found in M3:** tapping boost re-applied the surge kick every few frames (the bot's on/off boost pattern pumped speed up to 80 m/s on long straights). Fixed with a 1.5 s kick cooldown capped at boost speed. Re-measured M1 loop: Balanced 82.8 s, Grippy 81.2 s, Drifty 83.9 s (band 59–111 s) — still PASS; the 68 s figures above were inflated by the exploit. Wall scraping could also add speed (push-off applied every step); now push-off only on real impacts and speed after a hit never exceeds speed before it.
+
+## M3 — Streaming + The Stacks
+**Status: bot proxies PASS. UNPLAYED: needs human.**
+Stacks routes (Balanced): cross-district loop 63.7 s (band 48–103 s), Ring elevated lane 24.7 s (band 19–40 s); 0 dead-stops, 0 camera clips (Grippy/Drifty within 1 s). Stability drive: see PROGRESS.md (no leaks, no shader-compile hitches after fix, frame-time p99 ≈ 4× median on software rendering).
+
+Questions for a human (M3):
+1. Does the district feel big enough to roam, or do you run out of road? Does it feel like the same block repeated?
+2. Did you notice anything popping in or out as you drove (buildings, signs, people, lights)? Where?
+3. Were the Ring, the tram line and the canal easy to find and fun to use as alternative routes?
+4. Do the crowds and hover traffic make the city feel alive, or do they look fake up close?
+5. Any stutters while driving fast across the district? (Note your GPU and the Quality setting.)

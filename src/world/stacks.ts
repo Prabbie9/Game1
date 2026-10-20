@@ -128,7 +128,7 @@ export function buildStacks(): StacksWorld {
   // ---- the Ring: elevated lane along z = -230 at +12 m ----
   boxes.push(ramp([-345, 0, RING.z], [RING.x0, RING.y, RING.z], RING.w));
   boxes.push(box(RING.x0, RING.y - 1, RING.z - RING.w / 2, RING.x1, RING.y, RING.z + RING.w / 2, 'deck', { surface: 'concrete' }));
-  boxes.push(ramp([RING.x1, RING.y, RING.z], [296, 0, RING.z], RING.w));
+  boxes.push(ramp([RING.x1, RING.y, RING.z], [292, 0, RING.z], RING.w));
   for (const s of [-1, 1]) {
     const zz = RING.z + s * (RING.w / 2 + 0.25);
     boxes.push(box(RING.x0, RING.y, zz - 0.25, RING.x1, RING.y + 1.1, zz + 0.25, 'metal', { surface: 'metal' }));
@@ -142,7 +142,12 @@ export function buildStacks(): StacksWorld {
 
   // ---- tram line along z = 220 (+8 m deck, visual; pillars solid) ----
   boxes.push(box(-345, TRAM.y - 0.8, TRAM.z - 2.2, 345, TRAM.y, TRAM.z + 2.2, 'concrete', { collide: 'none' }));
-  for (let x = -330; x <= 330; x += 36) if (!V.some(([vx]) => Math.abs(vx - x) < 11)) boxes.push(box(x - 0.6, 0, TRAM.z - 0.6, x + 0.6, TRAM.y - 0.8, TRAM.z + 0.6, 'concrete', { surface: 'concrete' }));
+  // portal frames on the sidewalks (pillars never stand in the road) carrying the deck
+  for (let x = -330; x <= 330; x += 36) if (!V.some(([vx]) => Math.abs(vx - x) < 11)) for (const s of [-1, 1]) {
+    const zz = TRAM.z + s * 8.6;
+    boxes.push(box(x - 0.5, 0, zz - 0.5, x + 0.5, TRAM.y, zz + 0.5, 'concrete', { surface: 'concrete' }));
+  }
+  for (let x = -330; x <= 330; x += 36) if (!V.some(([vx]) => Math.abs(vx - x) < 11)) boxes.push(box(x - 0.4, TRAM.y - 0.8, TRAM.z - 9, x + 0.4, TRAM.y, TRAM.z + 9, 'concrete', { collide: 'none' }));
   for (let x = -330; x <= 330; x += 12) neons.push({ pos: [x, TRAM.y - 0.9, TRAM.z + 2.25], size: [6, 0.12], yaw: 0, color: '#ffa142', text: '', light: 0 });
 
   // ---- east Black Canal + canal-edge road ----

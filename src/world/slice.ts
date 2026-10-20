@@ -204,7 +204,7 @@ export function buildSlice(opts: { embed?: boolean } = {}): SliceWorld {
   holos.push({ pos: [58, 18, 70], yaw: -Math.PI / 2, size: [12, 6], color: '#ffa142', kind: 'ad' });
 
   // ---- plaza at the south end, boundary walls ----
-  boxes.push(box(-20, 0, 112, 12, 0.15, 118, 'sidewalk', { collide: 'ground', surface: 'concrete' }));
+  // (no plaza kerb slab: its edge strip would read as a barrier across the road)
   if (!opts.embed) for (const [x0, z0, x1, z1] of [[G.x0, G.z0, G.x1, G.z0 + 2], [G.x0, G.z1 - 2, G.x1, G.z1], [G.x0, G.z0, G.x0 + 2, G.z1], [G.x1 - 2, G.z0, G.x1, G.z1]]) boxes.push(box(x0, 0, z0, x1, 40, z1, 'facade', { lit: 0.25, seed: Math.floor(R() * 1e6) }));
   // far skyline (render-only, no collision) to fill the fog with lit towers
   for (let k = 0; k < (opts.embed ? 0 : 40); k++) {

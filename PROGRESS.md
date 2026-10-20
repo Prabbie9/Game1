@@ -1,9 +1,10 @@
 # PROGRESS
-NEXT STEP: M3: build dist with Stacks world (default), run nosplash headless, fix errors, then bot drive frame-time check (tools/stability.mjs).
+NEXT STEP: M4: capture look shots with a job active (waypoint beam + HUD), write M4 gate report to PROGRESS/PLAYTEST, smoke, checkpoint builds/M4-checkpoint.
 
-PLAYABLE BUILD: M2 checkpoint — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/.
+PLAYABLE BUILD: M3 checkpoint (includes working M4 job loop) — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/.
 
 ## Done
+- M3: Stacks zone + streaming, crowds, traffic, tram; checkpoint builds/M3-checkpoint.
 - M2: look slice (Hoshi Street), 3 look rounds, checkpoint builds/M2-checkpoint (smoke OK on file://).
 - M1: feel grey-box + mood test, gates self-checked, checkpoint builds/M1-checkpoint (smoke OK on file://).
 - M0: environment tested, delivery test built (hosted + single-file), effect check (DESIGN.md), SPEC/RULES/DESIGN/PLAYTEST/CREDITS written.
@@ -32,8 +33,15 @@ PLAYABLE BUILD: M2 checkpoint — hosted https://claude.ai/artifact/57iTMnatcL6j
 - Checklist honest read: long neon streak reflections YES; no crushed/clipped YES; bloom readable YES; distinct light shafts PARTIAL (lamp cones subtle; true volumetric UNVERIFIED/not enabled); materials distinct PARTIAL (asphalt/brick/metal differ, facades still simple); no visible tiling YES (all world-space procedural); flat-lit surfaces PARTIAL (block faces away from lights are flat); focal point YES (Hoshi); scale consistent YES; readable at speed YES. Target "prestige film still": not reached — reads as a stylised indie night city.
 - Motion captures run at ~10 fps headless → TRAA/motion blur ghosting exaggerated; UNVERIFIED on real GPU.
 
+## M3 report (streaming + The Stacks)
+- Built: 700 × 700 m Stacks zone (default world): Hoshi Street slice embedded, ~25 procedural blocks with dressed facades on a street grid, the Ring elevated lane (z −230, +12 m, ramps both ends), tram line (z 220, +8 m deck, shuttling tram with positional hum), east Black Canal + canal-edge road, Wan Tower landmark (165 m, holograms), rooftop shanties. Streaming: 100 m chunks, NEAR (<170 m: full dressing) / FAR (<340 m: buildings + signs) / unloaded, physics colliders streamed around the bike with hysteresis, one chunk build per frame. Neon atlas: one draw call per chunk for all signs. Crowds: instanced vertex-animated walkers on every sidewalk + glowing umbrellas (zero CPU). Hover traffic: instanced cars + light trails on lanes over every street (zero CPU).
+- FUN GATE: PASS — all slice routes + Stacks cross (63.7 s, band 48–103) and Ring (24.7 s, band 19–40), 0 dead-stops, 0 camera clips; all three presets. Bot found and fixed: boost-tap kick exploit (pumped to 80 m/s), wall-scrape energy gain, tram pillars standing mid-street.
+- STABILITY (bot drive, low tier, 640×360 SwiftShader, full 1.7 km cross route, 240 s): 0 errors; draw calls ≤ 265, tris ≤ 82 k, geometries ≤ 488, heap 40–62 MB flat (no leak), 215 chunk builds; median frame 240 ms (software), p99 975 ms, 2.5 % frames over 2.5× median. First run showed 22 s hitches from per-chunk material creation → all chunk materials now shared singletons. High tier at 640×360: ≤ 397 calls, ≤ 163 k tris. Real-GPU frame times UNVERIFIED.
+- LOOK GATE: round 1 captured (shots/m3r1_sheet.png, shot 8 = extra street-life view). Defects: hover-car underglow read as floating slabs (dimmed); Hoshi window desaturated to cream (more saturated amber, lower emissive); procedural side streets darker/sparser than Hoshi Street (accepted; fog + signs carry them). Crushed 0 %, clipped ≤ 0.02 %, road contrast 0.047–0.111.
+- Cut/changed: rooftops are visual only (no ramps to drive roofs) — scope cut, logged.
+
 ## In progress
-- M3 streaming + The Stacks (crowds.ts, traffic.ts written, not wired)
+- M4 core loop (jobs, heat, HUD, map, upgrades, save) — implemented and browser-tested; gates next
 
 ## Decisions
 - three r186 (WebGPURenderer + RenderPipeline), Rapier compat 0.21 in a worker, Vite 7, TS 5.9.

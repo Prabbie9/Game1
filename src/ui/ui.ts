@@ -16,6 +16,7 @@ export function loadSettings(): Settings {
 export function saveSettings(s: Settings) { try { localStorage.setItem('nc.settings', JSON.stringify(s)); } catch { /* storage unavailable */ } }
 
 const CSS = `
+#nc-ui.nohud > :not(.menu):not(.tune){display:none!important}
 :root{--nc-bg:rgba(6,8,16,.82);--nc-fg:#e9f3ff;--nc-dim:#8a97b0;--nc-cyan:#19e6ff;--nc-mag:#ff2aa8;--nc-amb:#ffa142;--nc-font:"Rajdhani","Bahnschrift","Segoe UI","Roboto Condensed",system-ui,sans-serif}
 #nc-ui{position:fixed;inset:0;pointer-events:none;font-family:var(--nc-font);color:var(--nc-fg);user-select:none;z-index:5}
 #nc-ui .panel{pointer-events:auto;background:var(--nc-bg);border:1px solid rgba(25,230,255,.25);box-shadow:0 0 40px rgba(0,0,0,.6);backdrop-filter:blur(6px)}
@@ -50,7 +51,7 @@ const CSS = `
 @media (prefers-reduced-motion: reduce){.loading .go{animation:none}}
 `;
 
-type MenuItem = { label: string; kind: 'button'; on: () => void } | { label: string; kind: 'toggle'; get: () => boolean; set: (v: boolean) => void }
+export type MenuItem = { label: string; kind: 'button'; on: () => void } | { label: string; kind: 'toggle'; get: () => boolean; set: (v: boolean) => void }
   | { label: string; kind: 'slider'; min: number; max: number; step: number; get: () => number; set: (v: number) => void; fmt?: (v: number) => string }
   | { label: string; kind: 'choice'; options: string[]; get: () => string; set: (v: string) => void };
 
@@ -65,21 +66,23 @@ export class UI {
 
   constructor(public settings: Settings, public tuning: Tuning, private hooks: {
     onSettings: (s: Settings) => void; onTuning: (t: Tuning) => void; onResume: () => void; onShots: () => void; credits: string;
+    garage?: () => MenuItem[]; wallet?: () => number;
   }) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     this.root = document.createElement('div'); this.root.id = 'nc-ui'; document.body.appendChild(this.root);
     this.root.innerHTML = `<div class="hud-speed"><div class="v">0</div><div class="u">KM/H</div><div class="hud-boost"></div><div class="hud-drift"></div></div>
-      <div class="hud-hint"></div><div class="hud-toast"></div>`;
+      <div class="hud-hint"></div><div class="hud-toast"></div><div class="hud-cred" style="position:absolute;right:36px;bottom:150px;font-size:15px;letter-spacing:3px;color:var(--nc-amb);text-shadow:0 0 6px #000"></div>`;
     this.speedV = this.root.querySelector('.hud-speed .v')!;
     this.boostBar = this.root.querySelector('.hud-boost')!;
     for (let i = 0; i < 12; i++) this.boostBar.appendChild(document.createElement('i'));
     this.driftBar = this.root.querySelector('.hud-drift')!;
     this.hint = this.root.querySelector('.hud-hint')!;
-    this.hint.innerHTML = [['throttle', 'drive'], ['steer', 'steer'], ['boost', 'boost'], ['drift', 'drift (builds boost)'], ['hopLeft', '/ ' + glyph('hopRight') + ' hop'], ['pause', 'menu'], ['tuning', 'tuning']]
+    this.hint.innerHTML = [['throttle', 'drive'], ['steer', 'steer'], ['boost', 'boost'], ['drift', 'drift (builds boost)'], ['hopLeft', '/ ' + glyph('hopRight') + ' hop'], ['interact', 'talk to fixers (rings)'], ['lights', 'lights (stealth)'], ['map', 'map'], ['pause', 'menu']]
       .map(([a, t]) => `<div><b>${glyph(a as any)}</b>${t}</div>`).join('');
     this.toastEl = this.root.querySelector('.hud-toast')!;
   }
 
+  setCredits(c: number) { (this.root.querySelector('.hud-cred') as HTMLElement).textContent = '¤ ' + c; }
   hud(speed: number, boost: number, boosting: boolean, drift: number, dt: number, t: number) {
     this.speedV.textContent = String(Math.round(speed * 3.6));
     const on = Math.round(boost * 12);
@@ -90,7 +93,7 @@ export class UI {
     if (this.toastT > 0) { this.toastT -= dt; if (this.toastT <= 0) this.toastEl.style.opacity = '0'; }
   }
   toast(msg: string, sec = 1.6) { this.toastEl.textContent = msg; this.toastEl.style.opacity = '1'; this.toastT = sec; }
-  setHudVisible(v: boolean) { (this.root.querySelector('.hud-speed') as HTMLElement).style.display = v ? '' : 'none'; this.hint.style.display = v ? '' : 'none'; }
+  setHudVisible(v: boolean) { this.root.classList.toggle('nohud', !v); }
 
   handle(a: ActionState) { if (this.menuOpen && this.focus) this.focus.handle(a); if (this.menuOpen && a.pressed.menuBack && this.stack.length > 1) { this.stack.pop(); this.stack[this.stack.length - 1](); } }
 
@@ -129,11 +132,16 @@ export class UI {
     this.renderMenu('NIGHT <span>COURIER</span>', 'PAUSED', [
       { label: 'Resume', kind: 'button', on: () => this.closeMenu() },
       { label: 'Settings', kind: 'button', on: () => { this.stack.push(() => this.settingsMenu()); this.settingsMenu(); } },
+      ...(this.hooks.garage ? [{ label: 'Garage (upgrades)', kind: 'button' as const, on: () => { this.stack.push(() => this.garageMenu()); this.garageMenu(); } }] : []),
       { label: 'Vehicle tuning', kind: 'button', on: () => { this.closeMenu(); this.toggleTuning(true); } },
       { label: 'Controls', kind: 'button', on: () => { this.stack.push(() => this.controlsMenu()); this.controlsMenu(); } },
       { label: 'Save reference shots', kind: 'button', on: () => { this.closeMenu(); this.hooks.onShots(); } },
       { label: 'Credits', kind: 'button', on: () => { this.stack.push(() => this.creditsMenu()); this.creditsMenu(); } },
     ]);
+  }
+  private garageMenu() {
+    const items = this.hooks.garage!().map((it) => it.kind === 'button' ? { ...it, on: () => { it.on(); this.garageMenu(); } } : it);
+    this.renderMenu('GARAGE', `CREDITS ¤ ${this.hooks.wallet?.() ?? 0}`, [...items, { label: 'Back', kind: 'button', on: () => { this.stack.pop(); this.stack[this.stack.length - 1](); } }]);
   }
   private settingsMenu() {
     const s = this.settings, ch = () => { saveSettings(s); this.hooks.onSettings(s); };

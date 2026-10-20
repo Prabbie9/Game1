@@ -4,6 +4,7 @@ export interface AudioFrame {
   speed: number; boosting: boolean; drifting: boolean; slip: number; grounded: boolean; onWater: boolean;
   rain: number; covered: boolean; cam: { x: number; y: number; z: number; fx: number; fz: number };
   buzzAt: { x: number; y: number; z: number } | null;
+  tramAt?: { x: number; y: number; z: number } | null;
 }
 
 export class GameAudio {
@@ -18,6 +19,7 @@ export class GameAudio {
   private water!: { g: GainNode };
   private buzz!: { p: PannerNode; g: GainNode };
   private city!: { f: BiquadFilterNode; g: GainNode };
+  private tram: PannerNode | null = null;
   private nextSiren = 0;
   private nextBeat = 0; private step = 0;
   musicOn = true; volume = 0.8;
@@ -60,6 +62,12 @@ export class GameAudio {
     const bzf = ctx.createBiquadFilter(); bzf.type = 'lowpass'; bzf.frequency.value = 900;
     bzg.connect(bzf).connect(p).connect(this.sfx);
     this.buzz = { p, g: bzg };
+    // tram: positional electric hum + wheel rumble
+    const tp = ctx.createPanner(); tp.panningModel = 'HRTF'; tp.distanceModel = 'inverse'; tp.refDistance = 8; tp.rolloffFactor = 1.2;
+    const tg = ctx.createGain(); tg.gain.value = 0.18;
+    for (const [fr, a] of [[55, 1], [110, 0.5], [165, 0.25]]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; const g2 = ctx.createGain(); g2.gain.value = a * 0.2; o.connect(g2).connect(tg); o.start(); }
+    const tf = ctx.createBiquadFilter(); tf.type = 'lowpass'; tf.frequency.value = 400;
+    tg.connect(tf).connect(tp).connect(this.sfx); this.tram = tp;
     // distant city: low traffic rumble (always on, ducks under cover)
     this.city = this.noiseVoice('lowpass', 160, 0.5);
     this.nextSiren = ctx.currentTime + 8;
@@ -92,6 +100,7 @@ export class GameAudio {
     this.set(this.boostL.o.frequency, 180 + sp * 6); this.set(this.boostL.g.gain, a.boosting ? 0.05 : 0, 0.08);
     const L = ctx.listener as any;
     if (L.positionX) { L.positionX.value = a.cam.x; L.positionY.value = a.cam.y; L.positionZ.value = a.cam.z; L.forwardX.value = a.cam.fx; L.forwardY.value = 0; L.forwardZ.value = a.cam.fz; }
+    if (a.tramAt && this.tram) { const p = this.tram as any; p.positionX.value = a.tramAt.x; p.positionY.value = a.tramAt.y; p.positionZ.value = a.tramAt.z; }
     if (a.buzzAt) { const p = this.buzz.p as any; p.positionX.value = a.buzzAt.x; p.positionY.value = a.buzzAt.y; p.positionZ.value = a.buzzAt.z; }
     this.set(this.city.g.gain, a.covered ? 0.05 : 0.09, 1.0);
     // a far siren or hover-traffic swell now and then, panned somewhere in the city

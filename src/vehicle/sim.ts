@@ -42,7 +42,7 @@ export interface VehicleState {
   driftReleased: number;  // kick applied
   boostStarted: boolean;
   safeX: number; safeY: number; safeZ: number; safeYaw: number; safeT: number;
-  t: number;
+  t: number; kickT: number;
 }
 
 export function createState(x: number, y: number, z: number, yaw: number): VehicleState {
@@ -50,7 +50,7 @@ export function createState(x: number, y: number, z: number, yaw: number): Vehic
     x, y, z, vx: 0, vy: 0, vz: 0, yaw, yawRate: 0, boost: 1, boosting: false, drifting: false, driftDir: 0, driftCharge: 0,
     grounded: false, groundDist: 99, nx: 0, ny: 1, nz: 0, surface: 'asphalt', airTime: 0, hopCd: 0,
     speed: 0, fwdSpeed: 0, slip: 0, impact: 0, landed: 0, hopped: false, driftReleased: 0, boostStarted: false,
-    safeX: x, safeY: y, safeZ: z, safeYaw: yaw, safeT: 0, t: 0,
+    safeX: x, safeY: y, safeZ: z, safeYaw: yaw, safeT: 0, t: 0, kickT: -9,
   };
 }
 
@@ -120,7 +120,11 @@ export function stepVehicle(s: VehicleState, inp: VehicleInput, T: Tuning, q: Ph
 
   // boost
   const wantBoost = inp.boost && (s.boosting ? s.boost > 0.01 : s.boost > 0.12);
-  if (wantBoost && !s.boosting) { s.boostStarted = true; vf += T.boostKick; }
+  if (wantBoost && !s.boosting) {
+    s.boostStarted = true;
+    // surge kick: once per 1.5 s and never past boost speed (tapping Shift must not pump speed)
+    if (s.t - s.kickT > 1.5) { vf = Math.min(vf + T.boostKick, Math.max(vf, T.boostSpeed)); s.kickT = s.t; }
+  }
   s.boosting = wantBoost;
   if (s.boosting) s.boost = Math.max(0, s.boost - T.boostDrain * dt);
   else s.boost = Math.min(1, s.boost + T.boostRegen * dt);
@@ -217,7 +221,9 @@ export function stepVehicle(s: VehicleState, inp: VehicleInput, T: Tuning, q: Ph
     if (tl < 0.05) { // perfectly head-on: pick tangent nearest heading's right side
       tx = -wz; tz = wx; if (tx * nrx + tz * nrz < 0) { tx = -tx; tz = -tz; } tl = 1;
     }
-    s.vx = tx / tl * keep + wx * 0.8; s.vz = tz / tl * keep + wz * 0.8; // slight push-off
+    const push = head > 0.3 ? 0.8 : 0; // slight push-off on real impacts only (scraping must not add energy)
+    const kept = Math.min(keep, sp0);
+    s.vx = tx / tl * kept + wx * push; s.vz = tz / tl * kept + wz * push;
     s.impact = Math.max(s.impact, -vin);
     // turn the nose toward the slide direction so the player keeps flowing
     const ty = Math.atan2(-s.vx, -s.vz);

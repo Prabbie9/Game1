@@ -52,9 +52,9 @@ function warmWinMat() {
   const haze = mx_noise_float(vec3(u.x.mul(5.0), u.y.mul(3.0).sub(time.mul(0.4)), 1.3)).mul(0.5).add(0.5);
   const counter = step(u.y, float(0.3));
   const silh = smoothstep(0.12, 0.08, abs(fract(u.x.mul(2.5)).sub(0.5))).mul(step(u.y, float(0.62))).mul(step(float(0.3), u.y));
-  const glow = vec3(1.0, 0.42, 0.12).mul(float(0.8).add(haze.mul(0.5))).mul(float(1).sub(silh.mul(0.95))).mul(mix(float(1), float(0.55), counter));
+  const glow = vec3(1.0, 0.32, 0.06).mul(float(0.8).add(haze.mul(0.5))).mul(float(1).sub(silh.mul(0.95))).mul(mix(float(1), float(0.55), counter));
   m.colorNode = vec3(0.02, 0.015, 0.01); m.roughnessNode = float(0.05); m.metalnessNode = float(0.2);
-  m.emissiveNode = glow.mul(1.05);
+  m.emissiveNode = glow.mul(0.75);
   return m;
 }
 function corrugated(col: number) {
@@ -96,6 +96,16 @@ function clothMat() {
   return m;
 }
 
+// Materials are created once and shared by every chunk: a new material = a new shader compile (a hitch).
+let _propMats: Record<string, THREE.Material> | null = null;
+function propMats() {
+  return _propMats ??= {
+    shopwin: shopGlassMat(), warmwin: warmWinMat(), frame: plainStd(0x16171b, 0.4, 0.6), shutter: corrugated(0x4a4d52), awning: canvas(),
+    metal: corrugated(0x5a5e66), dark: plainStd(0x0c0d10, 0.6, 0.3), lantern: lanternMat(), rail: plainStd(0x22252b, 0.3, 0.9),
+  };
+}
+let _cableMat: THREE.Material | null = null, _clothMat: THREE.Material | null = null, _steamMat: THREE.Material | null = null;
+
 // ---- builders ---------------------------------------------------------------------------
 export function buildProps(props: PropDef[]) {
   const buckets: Record<string, THREE.BufferGeometry[]> = {};
@@ -120,10 +130,7 @@ export function buildProps(props: PropDef[]) {
       case 'balcony': put('metal', boxAt(p, sx, 0.12, sz, 0, 0, sz / 2)); put('rail', boxAt(p, sx, 0.9, 0.05, 0, 0.45, sz)); break;
     }
   }
-  const mats: Record<string, THREE.Material> = {
-    shopwin: shopGlassMat(), warmwin: warmWinMat(), frame: plainStd(0x16171b, 0.4, 0.6), shutter: corrugated(0x4a4d52), awning: canvas(),
-    metal: corrugated(0x5a5e66), dark: plainStd(0x0c0d10, 0.6, 0.3), lantern: lanternMat(), rail: plainStd(0x22252b, 0.3, 0.9),
-  };
+  const mats = propMats();
   const g = new THREE.Group();
   for (const [k, gs] of Object.entries(buckets)) {
     const mesh = new THREE.Mesh(mergeProps(gs), mats[k]); mesh.castShadow = k !== 'shopwin' && k !== 'warmwin'; mesh.receiveShadow = true; g.add(mesh);
@@ -163,8 +170,8 @@ export function buildCables(cables: CableDef[]) {
     }
   }
   const grp = new THREE.Group();
-  if (cg.length) grp.add(new THREE.Mesh(mergeProps(cg), cableMat()));
-  if (lg.length) { const m = new THREE.Mesh(mergeProps(lg), clothMat()); m.castShadow = true; grp.add(m); }
+  if (cg.length) grp.add(new THREE.Mesh(mergeProps(cg), _cableMat ??= cableMat()));
+  if (lg.length) { const m = new THREE.Mesh(mergeProps(lg), _clothMat ??= clothMat()); m.castShadow = true; grp.add(m); }
   return grp;
 }
 
@@ -189,6 +196,11 @@ export function buildSteam(defs: SteamDef[]) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
   g.setAttribute('sd', new THREE.BufferAttribute(seed, 4)); g.setAttribute('tint', new THREE.BufferAttribute(tint, 3)); g.setIndex(idx);
+  const mesh = new THREE.Mesh(g, _steamMat ??= steamMat()); mesh.frustumCulled = false; mesh.renderOrder = 7;
+  return mesh;
+}
+
+function steamMat() {
   const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
   const sd = attribute('sd', 'vec4'), cn = attribute('corner', 'vec2'), base = attribute('position', 'vec3'), tn = attribute('tint', 'vec3');
   const radius = floor(sd.w).div(10.0);
@@ -206,8 +218,7 @@ export function buildSteam(defs: SteamDef[]) {
   const puff = smoothstep(1.0, 0.1, r).mul(mx_noise_float(vec3(cn.mul(1.5).add(sd.xy.mul(10.0)), time.mul(0.2))).mul(0.4).add(0.6));
   const alpha = puff.mul(smoothstep(0.0, 0.15, life)).mul(float(1).sub(life)).mul(0.06);
   m.colorNode = tn.mul(alpha).mul(distFade());
-  const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 7;
-  return mesh;
+  return m;
 }
 
 /** Hologram billboards: scanline emissive patterns with flicker (honours reduce-flicker). */

@@ -111,9 +111,10 @@ export function buildNeons(neons: NeonDef[]) {
 }
 
 /** Fake volumetric shafts under lamps. */
+const coneMats = new Map<string, THREE.Material>(); // shared across chunks (no recompiles)
 export function buildCones(lights: LightDef[]) {
   const group = new THREE.Group();
-  const mats = new Map<string, THREE.Material>();
+  const mats = coneMats;
   for (const l of lights) {
     if (!l.cone) continue;
     const len = Math.min(l.pos[1] + 0.2, 9);

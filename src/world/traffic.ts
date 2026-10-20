@@ -41,7 +41,7 @@ export class Traffic {
     m.colorNode = mix(vec3(0.05, 0.055, 0.07), vec3(0.2, 0.05, 0.1), iC.x.mul(0.5));
     m.metalnessNode = float(0.7); m.roughnessNode = float(0.3);
     const em = mix(mix(vec3(0), vec3(1.0, 0.05, 0.08).mul(6.0), step(0.5, gl).mul(step(gl, float(1.5)))),
-      mix(vec3(0.9, 0.95, 1.0).mul(8.0), mix(vec3(0.1, 0.9, 1.0), vec3(1.0, 0.2, 0.7), step(0.5, iC.x)).mul(2.0), step(2.5, gl)), step(1.5, gl));
+      mix(vec3(0.9, 0.95, 1.0).mul(8.0), mix(vec3(0.1, 0.9, 1.0), vec3(1.0, 0.2, 0.7), step(0.5, iC.x)).mul(0.6), step(2.5, gl)), step(1.5, gl));
     m.emissiveNode = em;
     const cars = new THREE.InstancedMesh(geo, m, n); cars.frustumCulled = false; this.group.add(cars);
 
