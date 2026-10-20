@@ -12,7 +12,7 @@ import { ChunkStreamer } from './streaming/chunks';
 import { Crowds } from './crowds/crowds';
 import { Traffic, Tram } from './world/traffic';
 import { PhysicsClient } from './physics/client';
-import { InputSystem, KeyboardMouse } from './input/actions';
+import { InputSystem, KeyboardMouse, glyph } from './input/actions';
 import { BALANCED, PRESETS, cloneTuning, type Tuning } from './vehicle/tuning';
 import { createState, type VehicleInput, type VehicleState } from './vehicle/sim';
 import { BikeModel } from './vehicle/bikeModel';
@@ -26,7 +26,10 @@ import { HeatSystem } from './heat/heat';
 import { NavUI } from './ui/nav';
 import { Career } from './jobs/career';
 import { JOBS } from './jobs/jobs';
-import { SHOTS, setupShot, saveReferenceShots } from './debug/shots';
+import { SHOTS, setupShot, saveReferenceShots, captureCanvas, saveBlob } from './debug/shots';
+import { PhotoMode } from './ui/photo';
+import { Person } from './vehicle/person';
+import { BAR } from './world/noodlebar';
 import type { WorldDef } from './world/defs';
 
 const params = new URLSearchParams(location.search);
@@ -97,10 +100,13 @@ async function boot() {
   const occ = new Occlusion(world);
   const heat = new HeatSystem(scene, occ);
   heat.onRoadblocks = (rb) => { if (rb) physics.addChunk('roadblock', rb.map((r) => ({ c: [r.x, 0.55, r.z] as [number, number, number], h: [1.8, 0.55, 0.3] as [number, number, number], yaw: r.yaw, mat: 'hazard' as const }))); else physics.removeChunk('roadblock'); };
-  const nav = new NavUI(ui.root, world, worldName === 'stacks' ? 360 : 260);
+  const nav = new NavUI(ui.root, world, worldName === 'stacks' ? 690 : 260, worldName === 'stacks' ? -320 : 0, 0);
   const career: Career | null = worldName === 'test' ? null : new Career(scene, world, nav, ui, heat, audio, tuning);
   if (career) { career.onTuning = (t) => physics.setTuning(t); career.applyUpgrades(); ui.setCredits(career.save.credits); }
   heat.onSpotted = () => { ui.toast('SPOTTED', 1.5); audio.blip(0.5); };
+  const photo = new PhotoMode({ setTime: (h) => setTime(h), setRain: (r) => setRain(r), bike: bike.root,
+    capture: async () => { const png = await captureCanvas(game); await saveBlob(new Blob([png as BlobPart], { type: 'image/png' }), `night-courier-${Date.now()}.png`); },
+    onExit: () => { physics.freeze(false); ui.setHudVisible(true); if (career) career.showMarkers = true; } });
   const applySettings = (s: Settings) => {
     U.flicker.value = s.reduceFlicker ? 0 : 1;
     audio.musicOn = s.music; audio.volume = s.volume; if (audio.master) audio.master.gain.value = s.volume;
@@ -117,6 +123,15 @@ async function boot() {
   let frozenCam: { pos: THREE.Vector3; look: THREE.Vector3; fov: number } | null = null;
   let shake = 0, timeOfDay = 23.5, rainAmt = 1, t = 0, frames = 0;
   const camVel = new THREE.Vector3(), lastCam = new THREE.Vector3();
+  // on foot (M5): parked bike pose, the courier figure, the cook inside Hoshi
+  let onFoot = false; let inside = false; let fade = 0;
+  const parked = { x: 0, y: 0, z: 0, yaw: 0 };
+  const courier = new Person(scene); courier.root.visible = false;
+  const cook = worldName === 'stacks' ? new Person(scene, 0x3a2418, 0xffa142) : null;
+  if (cook) cook.update(BAR.kiso[0], BAR.kiso[1] + 0.9, BAR.kiso[2], Math.PI, 0, true, 0);
+  const fadeEl = document.createElement('div'); fadeEl.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .35s;z-index:6'; document.body.appendChild(fadeEl);
+  const doFade = (then: () => void) => { fadeEl.style.opacity = '1'; setTimeout(() => { then(); setTimeout(() => { fadeEl.style.opacity = '0'; }, 250); }, 380); };
+  const FOOT_CAM = { camDistance: 3.4, camHeight: 1.9, camPullBack: 0, camLookAhead: 0, camStiffness: 7, fovBase: 60, fovBoost: 0 };
   const ft: number[] = [];
 
   const setTime = (h: number) => {
@@ -145,7 +160,7 @@ async function boot() {
         streaming: streamer.stats(), frameMsP50: s[Math.floor(s.length * 0.5)] ?? 0, frameMsP99: s[Math.floor(s.length * 0.99)] ?? 0, heapMB: (performance as any).memory ? Math.round((performance as any).memory.usedJSHeapSize / 1048576) : null,
         speed: simState.speed, pos: [simState.x, simState.y, simState.z] };
     },
-    frameCount: () => frames, renderFrame: () => post.render(), hud: (v) => ui.setHudVisible(v),
+    frameCount: () => frames, renderFrame: () => post.render(), hud: (v) => { ui.setHudVisible(v); if (career) career.showMarkers = v; },
   };
   (window as any).NRC_DEBUG = {
     game,
@@ -172,6 +187,10 @@ async function boot() {
     else if (a.pressed.pause && ui.tuningOpen) ui.toggleTuning(false);
     if (a.pressed.tuning) ui.toggleTuning();
     if (a.pressed.map && !ui.menuOpen) nav.toggleMap();
+    if (a.pressed.photo && !ui.menuOpen && !careerOwns) {
+      if (photo.active) photo.exit();
+      else { photo.enter(camera, timeOfDay, rainAmt); physics.freeze(true); ui.setHudVisible(false); if (career) career.showMarkers = false; document.exitPointerLock?.(); }
+    }
     if (a.pressed.lights) { bike.lightsOn = !bike.lightsOn; ui.toast(bike.lightsOn ? 'LIGHTS ON' : 'LIGHTS OFF'); }
     ui.handle(a);
 
@@ -179,11 +198,33 @@ async function boot() {
       : { throttle: a.axes.throttle, steer: a.axes.steer, boost: a.down.boost, drift: a.down.drift, hopLeft: a.pressed.hopLeft, hopRight: a.pressed.hopRight };
     if (bot && !paused) vin = bot.drive(simState, tuning);
     const ev = physics.takeEvents();
-    if (career && !paused) {
+    if (photo.active) vin = { throttle: 0, steer: 0, boost: false, drift: false, hopLeft: false, hopRight: false };
+    if (career && !paused && !photo.active) {
       const owns = career.update(dt, simState, a, ev, Math.atan2(-(cam.tx - cam.x), -(cam.tz - cam.z)), bike.lightsOn);
       if (owns) vin = { throttle: 0, steer: 0, boost: false, drift: false, hopLeft: false, hopRight: false };
       ui.setCredits(career.save.credits);
     }
+    // on-foot / doors: F near Hoshi's door enters, F by the bike mounts, F when stopped (and no fixer) dismounts
+    if (!paused && !photo.active && career && !careerOwns && !nav.dialogOpen && !nav.cardOpen && worldName === 'stacks') {
+      const h = world.anchors.hoshi;
+      const nearDoor = onFoot && !inside && h && Math.hypot(h.pos[0] + Math.sin(h.yaw) * 1.2 - simState.x, h.pos[2] + Math.cos(h.yaw) * 1.2 - simState.z) < 3;
+      const nearExit = inside && Math.hypot(BAR.door[0] - simState.x, BAR.door[2] - simState.z) < 1.8;
+      const nearBike = onFoot && !inside && Math.hypot(parked.x - simState.x, parked.z - simState.z) < 3;
+      if (nearDoor) nav.showPrompt(`<b>${glyph('interact')}</b>Enter Hoshi Noodle Bar`);
+      else if (nearExit) nav.showPrompt(`<b>${glyph('interact')}</b>Back out into the rain`);
+      else if (nearBike) nav.showPrompt(`<b>${glyph('interact')}</b>Ride`);
+      if (a.pressed.interact && !(career.nearFixer)) {
+        if (nearDoor && h) { doFade(() => { inside = true; physics.teleport(BAR.door[0], BAR.door[1] + 0.3, BAR.door[2] - 0.6, 0); }); }
+        else if (nearExit && h) { doFade(() => { inside = false; physics.teleport(h.pos[0] + Math.sin(h.yaw) * 2.5, 1, h.pos[2] + Math.cos(h.yaw) * 2.5, h.yaw); }); }
+        else if (nearBike) { onFoot = false; physics.setMode('bike'); physics.teleport(parked.x, parked.y + 0.2, parked.z, parked.yaw); courier.root.visible = false; }
+        else if (!onFoot && simState.speed < 2 && simState.grounded) {
+          onFoot = true; Object.assign(parked, { x: simState.x, y: simState.y, z: simState.z, yaw: simState.yaw });
+          physics.setMode('foot'); physics.teleport(simState.x + Math.cos(simState.yaw) * 1.4, simState.y + 0.1, simState.z - Math.sin(simState.yaw) * 1.4, simState.yaw);
+          courier.root.visible = true;
+        }
+      }
+    }
+    if (onFoot) (vin as any).camYaw = Math.atan2(-(cam.tx - cam.x), -(cam.tz - cam.z));
     physics.frame(dt, vin, { pivot: cam.pivot, dir: cam.dir, len: cam.want, bike: [simState.x, simState.y, simState.z] });
     if (physics.cur) simState = physics.cur;
     const pose = physics.pose();
@@ -194,11 +235,15 @@ async function boot() {
     if (ev.driftReleased > 0) { audio.driftKick(); ui.toast('DRIFT BOOST', 0.8); }
 
     nav.update({ x: simState.x, z: simState.z, yaw: simState.yaw }, Math.atan2(-(cam.tx - cam.x), -(cam.tz - cam.z)), career?.objective ?? null, career?.markers2D() ?? [], heat.heat, heat.meter, heat.seen);
-    bike.update(pose, simState, dt);
+    if (onFoot) {
+      bike.update(parked, { ...simState, speed: 0, yawRate: 0, slip: 0, boosting: false, grounded: true, nx: 0, ny: 1, nz: 0 } as VehicleState, dt);
+      courier.update(pose.x, pose.y, pose.z, pose.yaw, simState.speed, simState.grounded, dt);
+    } else bike.update(pose, simState, dt);
     const look = input.consumeLook();
     const renderState = { ...simState, x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw };
-    updateChase(cam, renderState, { ...tuning, fovBase: tuning.fovBase + settings.fovOffset }, dt, look, () => physics.camFree);
-    if (frozenCam) {
+    updateChase(cam, renderState, { ...tuning, ...(onFoot ? FOOT_CAM : {}), fovBase: (onFoot ? FOOT_CAM.fovBase : tuning.fovBase) + settings.fovOffset }, dt, look, () => physics.camFree);
+    if (photo.active) photo.update(dt, a, look, camera);
+    else if (frozenCam) {
       camera.position.copy(frozenCam.pos); camera.lookAt(frozenCam.look); camera.fov = frozenCam.fov;
     } else {
       camera.position.set(cam.x, cam.y, cam.z);
@@ -217,7 +262,7 @@ async function boot() {
     camVel.copy(camera.position).sub(lastCam).divideScalar(Math.max(dt, 1e-3)); lastCam.copy(camera.position);
     if (camVel.length() > 80) camVel.set(0, 0, 0); // teleports
 
-    rain.update(camera.position, camVel, simState.grounded ? simState.y - simState.groundDist : 0, rainAmt);
+    rain.update(camera.position, camVel, simState.grounded ? simState.y - simState.groundDist : 0, inside ? 0 : rainAmt);
     pool.update(camera.position);
     streamer.update(camera.position, new THREE.Vector3(simState.x, simState.y, simState.z));
     tram?.update(t);
@@ -225,7 +270,7 @@ async function boot() {
     // covered = under the tunnel roof or the deck (cheap analytic test for audio)
     const covered = worldName === 'test'
       ? (Math.abs(simState.z - 90) < 10 && Math.abs(simState.x) < 80 && simState.y < 6) || (Math.abs(simState.z + 90) < 7 && Math.abs(simState.x) < 100 && simState.y < 8)
-      : Math.abs(simState.x - 35) < 6 && simState.z < 62 && simState.z > -96 && simState.y < 8;
+      : inside || (Math.abs(simState.x - 35) < 6 && simState.z < 62 && simState.z > -96 && simState.y < 8);
     const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
     audio.update({ speed: simState.speed, boosting: simState.boosting, drifting: simState.drifting, slip: simState.slip, grounded: simState.grounded,
       onWater: simState.surface === 'water', rain: rainAmt, covered, cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z, fx: fwd.x, fz: fwd.z },
@@ -235,6 +280,7 @@ async function boot() {
     // speed-adaptive post: blur, DoF and CA ramp with speed so the frame stays readable when slow
     const sp01 = Math.min(1, Math.max(0, (simState.speed - 12) / 23));
     POST.bloomStrength.value = 0.5 + (simState.boosting ? 0.08 : 0);
+    if (!photo.active) {
     // velocity buffer is per-frame: normalise to a 60 fps reference so low frame rates don't over-blur
     POST.blurAmount.value = settings.motionBlur && !frozenCam ? (0.05 + sp01 * 0.2) * Math.min(1, (1 / 60) / Math.max(dt, 1e-3)) : 0;
     POST.focusDist.value = frozenCam ? frozenCam.pos.distanceTo(frozenCam.look) : cam.armLen + 1;
@@ -242,6 +288,7 @@ async function boot() {
     POST.bokeh.value = frozenCam ? 1.0 : sp01 * 0.35; // gameplay: only a hint of far blur at speed
     POST.ca.value = (settings.reduceFlicker ? 0.3 : 1) * (0.05 + sp01 * 0.12 + (simState.boosting ? 0.08 : 0));
     POST.lensWet.value = rainAmt * (covered ? 0 : 1) * Math.max(0, 1 - simState.speed / 30);
+    }
     post.render();
     if (!(window as any).__NC_MANUAL) requestAnimationFrame(frame);
   };
@@ -252,6 +299,9 @@ async function boot() {
   requestAnimationFrame(frame);
   (window as any).__NC_READY = true;
   if (shot && SHOTS[shot]) await setupShot(game, shot);
+  // debug: ?job=<id> starts a job at load, ?map=1 opens the full map (captures / testing)
+  if (params.get('job')) (window as any).NRC_DEBUG.startJob(params.get('job'));
+  if (params.get('map')) nav.toggleMap(true);
 }
 
 boot().catch((e) => { console.error('boot failed', e); const el = document.querySelector('.loading .s'); if (el) el.textContent = 'FAILED TO START: ' + (e?.message ?? e); });

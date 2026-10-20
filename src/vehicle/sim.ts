@@ -241,3 +241,30 @@ export function stepVehicle(s: VehicleState, inp: VehicleInput, T: Tuning, q: Ph
   s.fwdSpeed = s.vx * ffx + s.vz * ffz;
   s.slip = s.vx * Math.cos(s.yaw) + s.vz * -Math.sin(s.yaw);
 }
+
+// ---- on foot (M5): same state struct, capsule-ish ball collider, walk / sprint / jump -------------------
+export const FOOT = { walk: 2.6, sprint: 6.2, accel: 14, jump: 5.2, gravity: 18, height: 0.9 };
+
+/** On-foot step. `inp.throttle/steer` are interpreted relative to `camYaw` (camera-relative movement). */
+export function stepFoot(s: VehicleState, inp: VehicleInput & { camYaw?: number }, q: PhysQuery, dt = SIM_DT) {
+  s.t += dt; s.impact = 0; s.landed = 0; s.hopped = false; s.driftReleased = 0; s.boostStarted = false;
+  const cy = inp.camYaw ?? s.yaw;
+  const fx = -Math.sin(cy), fz = -Math.cos(cy), rx = Math.cos(cy), rz = -Math.sin(cy);
+  let mx = fx * inp.throttle + rx * inp.steer, mz = fz * inp.throttle + rz * inp.steer;
+  const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
+  const top = inp.boost ? FOOT.sprint : FOOT.walk;
+  const k = 1 - Math.exp(-FOOT.accel * dt / Math.max(1, top));
+  s.vx += (mx * top - s.vx) * Math.min(1, k * 4); s.vz += (mz * top - s.vz) * Math.min(1, k * 4);
+  if (ml > 0.1) { const ty = Math.atan2(-mx, -mz); let d = ty - s.yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; s.yaw += d * Math.min(1, 12 * dt); }
+  const g = q.rayGround(s.x, s.y, s.z, FOOT.height + 0.6);
+  const wasG = s.grounded;
+  s.grounded = !!g && g.dist <= FOOT.height + 0.12 && s.vy <= 0.5;
+  if (s.grounded && g) { s.y += (FOOT.height - g.dist) * Math.min(1, 20 * dt); s.vy = 0; if (!wasG) s.landed = 1; s.surface = g.surface; }
+  else s.vy -= FOOT.gravity * dt;
+  if ((inp.hopLeft || inp.hopRight) && s.grounded) { s.vy = FOOT.jump; s.grounded = false; s.hopped = true; }
+  const res = q.moveAndSlide(s.x, s.y, s.z, s.vx * dt, s.vy * dt, s.vz * dt);
+  s.x = res.x; s.y = res.y; s.z = res.z;
+  for (const h of res.hits) { const vn = s.vx * h.nx + s.vy * h.ny + s.vz * h.nz; if (vn < 0) { s.vx -= h.nx * vn; s.vy -= h.ny * vn; s.vz -= h.nz * vn; } }
+  if (s.y < -80) teleport(s, s.safeX, s.safeY + 1, s.safeZ, s.safeYaw);
+  s.speed = Math.hypot(s.vx, s.vz); s.fwdSpeed = s.speed; s.slip = 0; s.boosting = false; s.drifting = false;
+}

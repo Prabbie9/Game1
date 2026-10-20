@@ -14,6 +14,7 @@ import type { SimEvents } from '../physics/client';
 import type { GameAudio } from '../audio/audio';
 import type { Tuning } from '../vehicle/tuning';
 import { distFade } from '../materials/materials';
+import { GhostPlayer, GhostRecorder, loadGhost, saveGhost } from './ghost';
 import type { WorldDef } from '../world/defs';
 
 function beam(color: string, radius: number, height: number, strength: number) {
@@ -40,11 +41,16 @@ export class Career {
   private resultOpen = false;
   private lastJob: JobDef | null = null;
   stealthMul = 1;
+  showMarkers = true;
+  nearFixer = false; // hidden for reference shots / photo mode
+  private rec = new GhostRecorder();
+  private ghost: GhostPlayer | null = null;
+  private cps: [number, number, number][] = [];
   onTuning: (t: Tuning) => void = () => {};
-  constructor(private scene: THREE.Scene, world: WorldDef, private nav: NavUI, private ui: UI, private heat: HeatSystem, private audio: GameAudio, private baseTuning: Tuning) {
+  constructor(private scene: THREE.Scene, private world: WorldDef, private nav: NavUI, private ui: UI, private heat: HeatSystem, private audio: GameAudio, private baseTuning: Tuning) {
     const h = world.anchors.hoshi;
     this.fixers = FIXERS.map((f) => f.id === 'kiso' && h ? { ...f, pos: [h.pos[0] + Math.sin(h.yaw) * 4.5, 0, h.pos[2] + Math.cos(h.yaw) * 4.5] as [number, number, number] } : f);
-    for (const f of this.fixers) { const b = beam(f.color, 0.6, 26, 0.6); b.position.set(...f.pos); scene.add(b); this.markers.push(b); }
+    for (const f of this.fixers) { const b = beam(f.color, 0.45, 22, 0.22); b.position.set(...f.pos); scene.add(b); this.markers.push(b); }
     this.objBeam = beam('#ffa142', 1.4, 160, 1.6); this.objBeam.visible = false; scene.add(this.objBeam);
     nav.blip = (p) => audio.blip(p);
     this.applyUpgrades();
@@ -86,6 +92,10 @@ export class Career {
       this.heat.setHeat(2);
     }
     if (job.type === 'dark') for (const p of job.sweepers ?? []) this.heat.add('sweeper', new THREE.Vector3(...p[0]), p.map((q) => new THREE.Vector3(...q)));
+    this.cps = job.checkpoints ? ((this.world as any)[job.checkpoints] ?? []) : [];
+    this.rec.reset();
+    this.ghost?.dispose(this.scene); this.ghost = null;
+    const gd = loadGhost(job.id); if (gd) { this.ghost = new GhostPlayer(this.scene, gd); this.ui.toast('GHOST: YOUR BEST RUN', 2); }
     this.ui.toast(job.title.toUpperCase(), 2.5);
   }
 
@@ -111,10 +121,12 @@ export class Career {
     }
     // fixer proximity
     let prompt: string | null = null;
+    this.nearFixer = false;
     if (run.phase === 'idle' && !owns) {
       for (const f of this.fixers) {
         const d = Math.hypot(f.pos[0] - s.x, f.pos[2] - s.z);
         if (d < 9 && Math.abs(f.pos[1] - s.y) < 4) {
+          this.nearFixer = true;
           prompt = s.speed < 7 ? `<b>${glyph('interact')}</b>Talk to ${f.name}` : `Slow down to talk to ${f.name}`;
           if (s.speed < 7 && a.pressed.interact) {
             const job = this.nextJobFor(f); this.talking = f; this.offered = job;
@@ -144,15 +156,24 @@ export class Career {
         if (run.shakeT >= 6 || !hound) { run.shaken = true; if (hound) hound.leaving = true; this.ui.toast('HOUND SHAKEN', 2); this.audio.blip(1.6); }
       }
       if (job.type === 'dark') objText = `Stay dark → ${job.dropName}`;
+      this.rec.tick(dt, s.x, s.y, s.z, s.yaw);
+      this.ghost?.update(run.t);
+      if (job.type === 'trial') {
+        const c = this.cps[run.cp];
+        objText = `Lantern gate ${run.cp + 1} / ${this.cps.length}`;
+        if (c && Math.hypot(c[0] - s.x, c[2] - s.z) < 11 && Math.abs(c[1] - s.y) < 5) { run.cp++; this.audio.blip(1.1 + run.cp * 0.08); if (run.cp < this.cps.length) this.ui.toast(`GATE ${run.cp} / ${this.cps.length}`, 0.9); }
+        if (run.cp >= this.cps.length) { this.finish(true); this.nav.jobPanel(job, job.time - run.t, objText); return owns; }
+      }
       this.nav.jobPanel(job, job.time - run.t, objText);
       const d = Math.hypot(job.drop[0] - s.x, job.drop[2] - s.z);
-      if (run.shaken && d < 8 && Math.abs(job.drop[1] - s.y) < 4 && s.speed < 16) this.finish(true);
+      if (job.type !== 'trial' && run.shaken && d < 8 && Math.abs(job.drop[1] - s.y) < 4 && s.speed < 16) this.finish(true);
       else if (run.t > job.time) this.finish(false);
       else if (job.type === 'dark' && this.heat.spotted) this.finish(false);
     } else this.nav.jobPanel(null, 0, '');
-    const obj = run.phase === 'active' && run.job && run.shaken ? run.job.drop : null;
+    const obj = this.objectivePos();
     this.objBeam.visible = !!obj; if (obj) this.objBeam.position.set(...obj);
-    for (const m of this.markers) m.visible = run.phase === 'idle';
+    for (const m of this.markers) m.visible = run.phase === 'idle' && this.showMarkers;
+    this.objBeam.visible &&= this.showMarkers;
     return owns;
   }
 
@@ -165,11 +186,13 @@ export class Career {
 
   private finish(ok: boolean) {
     const run = this.run, job = run.job!;
+    this.ghost?.dispose(this.scene); this.ghost = null;
     this.resultOpen = true;
     if (ok) {
       const r = rate(job, run.t, run.style, run.maxHeat);
       this.save.credits += r.reward;
       const prev = this.save.done[job.id];
+      if (!prev || run.t < prev.best) saveGhost(job.id, this.rec.data);
       if (!prev || r.stars > prev.stars || (r.stars === prev.stars && r.time < prev.best)) this.save.done[job.id] = { stars: Math.max(prev?.stars ?? 0, r.stars), best: Math.min(prev?.best ?? 1e9, r.time) };
       writeSave(this.save);
       run.phase = 'done';
@@ -183,6 +206,10 @@ export class Career {
   }
 
   markers2D() { return this.fixers.map((f) => ({ x: f.pos[0], z: f.pos[2], color: f.color })); }
-  get objective() { const o = this.run.phase === 'active' && this.run.job && this.run.shaken ? this.run.job.drop : null; return o ? { x: o[0], z: o[2] } : null; }
+  private objectivePos(): [number, number, number] | null {
+    const r = this.run; if (r.phase !== 'active' || !r.job || !r.shaken) return null;
+    return r.job.type === 'trial' ? (this.cps[r.cp] ?? null) : r.job.drop;
+  }
+  get objective() { const o = this.objectivePos(); return o ? { x: o[0], z: o[2] } : null; }
 }
 export const _cr = { abs, smoothstep };

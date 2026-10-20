@@ -2,7 +2,7 @@
 // Main thread sends input each frame; worker replies with the last two sim states for interpolation.
 import RAPIER from '@dimforge/rapier3d-compat';
 import { RapierWorld } from './query';
-import { createState, stepVehicle, SIM_DT, teleport, VehicleInput, VehicleState, NO_INPUT } from '../vehicle/sim';
+import { createState, stepVehicle, stepFoot, SIM_DT, teleport, VehicleInput, VehicleState, NO_INPUT } from '../vehicle/sim';
 import { BALANCED, Tuning } from '../vehicle/tuning';
 import type { BoxDef } from '../world/defs';
 
@@ -13,6 +13,7 @@ let T: Tuning = { ...BALANCED };
 let acc = 0;
 let pendingHopL = false, pendingHopR = false;
 let frozen = false;
+let mode: 'bike' | 'foot' = 'bike';
 
 const post = (m: any) => (self as any).postMessage(m);
 
@@ -35,6 +36,7 @@ self.onmessage = async (e: MessageEvent) => {
       case 'removeChunk': world?.removeKey(m.key); break;
       case 'tuning': T = m.tuning; break;
       case 'freeze': frozen = m.on; break;
+      case 'mode': mode = m.mode; break;
       case 'teleport': if (state && world) { teleport(state, m.x, m.y, m.z, m.yaw); if (m.speed) { state.vx = -Math.sin(m.yaw) * m.speed; state.vz = -Math.cos(m.yaw) * m.speed; } for (let i = 0; i < 30; i++) stepVehicle(state, NO_INPUT, T, world); prev = { ...state }; acc = 0; } break;
       case 'frame': {
         if (!world || !state) return;
@@ -45,7 +47,8 @@ self.onmessage = async (e: MessageEvent) => {
         while (acc >= SIM_DT && !frozen) {
           acc -= SIM_DT;
           prev = { ...state };
-          stepVehicle(state, { ...inp, hopLeft: pendingHopL, hopRight: pendingHopR }, T, world);
+          if (mode === 'foot') stepFoot(state, { ...inp, hopLeft: pendingHopL, hopRight: pendingHopR }, world);
+          else stepVehicle(state, { ...inp, hopLeft: pendingHopL, hopRight: pendingHopR }, T, world);
           pendingHopL = pendingHopR = false;
           impact = Math.max(impact, state.impact); landed = Math.max(landed, state.landed);
           hopped ||= state.hopped; driftReleased = Math.max(driftReleased, state.driftReleased); boostStarted ||= state.boostStarted;

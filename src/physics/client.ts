@@ -43,7 +43,7 @@ export class PhysicsClient {
   }
 
   /** Send this frame's input; at most 2 frames in flight so a slow worker never builds a queue. */
-  frame(dt: number, input: VehicleInput, cam: { pivot: number[]; dir: number[]; len: number; bike: number[] }) {
+  frame(dt: number, input: VehicleInput & { camYaw?: number }, cam: { pivot: number[]; dir: number[]; len: number; bike: number[] }) {
     if (!this.ready || this.inflight > 2) return;
     this.inflight++;
     this.worker.postMessage({ type: 'frame', dt, input, cam });
@@ -59,6 +59,7 @@ export class PhysicsClient {
   setTuning(t: Tuning) { this.worker.postMessage({ type: 'tuning', tuning: t }); }
   teleport(x: number, y: number, z: number, yaw: number, speed = 0) { this.worker.postMessage({ type: 'teleport', x, y, z, yaw, speed }); }
   freeze(on: boolean) { this.worker.postMessage({ type: 'freeze', on }); }
+  setMode(mode: 'bike' | 'foot') { this.worker.postMessage({ type: 'mode', mode }); }
   addChunk(key: string, boxes: BoxDef[]) { this.worker.postMessage({ type: 'addChunk', key, boxes }); }
   removeChunk(key: string) { this.worker.postMessage({ type: 'removeChunk', key }); }
 

@@ -54,7 +54,7 @@ function warmWinMat() {
   const silh = smoothstep(0.12, 0.08, abs(fract(u.x.mul(2.5)).sub(0.5))).mul(step(u.y, float(0.62))).mul(step(float(0.3), u.y));
   const glow = vec3(1.0, 0.32, 0.06).mul(float(0.8).add(haze.mul(0.5))).mul(float(1).sub(silh.mul(0.95))).mul(mix(float(1), float(0.55), counter));
   m.colorNode = vec3(0.02, 0.015, 0.01); m.roughnessNode = float(0.05); m.metalnessNode = float(0.2);
-  m.emissiveNode = glow.mul(0.75);
+  m.emissiveNode = glow.mul(0.5);
   return m;
 }
 function corrugated(col: number) {

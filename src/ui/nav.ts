@@ -42,7 +42,7 @@ export class NavUI {
   private dlgLines: string[] = []; private dlgI = 0; private dlgChar = 0; private dlgDone: (() => void) | null = null; private dlgT = 0;
   blip: (pitch: number) => void = () => {};
   dlgPitch = 1;
-  constructor(parent: HTMLElement, private world: WorldDef, private bounds = 360) {
+  constructor(parent: HTMLElement, private world: WorldDef, private bounds = 360, private cx = 0, private cz = 0) {
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     this.root = parent;
     const mk = (cls: string, html = '') => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; parent.appendChild(d); return d; };
@@ -65,13 +65,13 @@ export class NavUI {
   /** Pre-render the zone's building footprints once (top-down), used by minimap + full map. */
   private renderMapImage() {
     const c = document.createElement('canvas'); c.width = c.height = 1024; const g = c.getContext('2d')!;
-    const s = 1024 / (this.bounds * 2), X = (x: number) => (x + this.bounds) * s;
+    const s = 1024 / (this.bounds * 2), X = (x: number) => (x + this.bounds) * s, Xx = (x: number) => X(x - this.cx), Xz = (z: number) => X(z - this.cz);
     g.fillStyle = '#0d1424'; g.fillRect(0, 0, 1024, 1024);
     for (const b of this.world.boxes) {
-      if (b.mat === 'asphalt') continue;
+      if (b.mat === 'asphalt' || b.c[1] < -20) continue; // skip ground + hidden interiors
       const col = b.mat === 'water' ? '#0b3550' : b.mat === 'deck' ? '#5a3a6a' : b.mat === 'sidewalk' ? '#1c2438' : b.h[1] > 2 ? '#03050a' : null;
       if (!col) continue;
-      g.save(); g.translate(X(b.c[0]), X(b.c[2])); g.rotate(-(b.yaw ?? 0)); g.fillStyle = col;
+      g.save(); g.translate(Xx(b.c[0]), Xz(b.c[2])); g.rotate(-(b.yaw ?? 0)); g.fillStyle = col;
       const pz = b.pitch ? Math.cos(b.pitch) : 1;
       g.fillRect(-b.h[0] * s, -b.h[2] * s * pz, b.h[0] * 2 * s, b.h[2] * 2 * s * pz); g.restore();
     }
@@ -100,7 +100,7 @@ export class NavUI {
   private drawMini(p: { x: number; z: number }, camYaw: number, objective: { x: number; z: number } | null, markers: { x: number; z: number; color: string }[]) {
     const g = this.mini.getContext('2d')!, R = 85, scale = 1024 / (this.bounds * 2), zoom = 0.55; // ~150 m radius
     g.save(); g.clearRect(0, 0, 170, 170); g.translate(R, R); g.rotate(camYaw); g.scale(zoom * 2.4, zoom * 2.4);
-    g.drawImage(this.mapImg, -(p.x + this.bounds) * scale, -(p.z + this.bounds) * scale);
+    g.drawImage(this.mapImg, -(p.x - this.cx + this.bounds) * scale, -(p.z - this.cz + this.bounds) * scale);
     g.restore();
     const toMini = (x: number, z: number) => {
       const dx = (x - p.x) * scale * zoom * 2.4, dz = (z - p.z) * scale * zoom * 2.4, c = Math.cos(camYaw), s = Math.sin(camYaw);
@@ -113,11 +113,11 @@ export class NavUI {
   }
 
   private drawFull(p: { x: number; z: number; yaw?: number }, objective: { x: number; z: number } | null, markers: { x: number; z: number; color: string }[]) {
-    const g = this.full.getContext('2d')!, S = 900 / (this.bounds * 2), X = (v: number) => (v + this.bounds) * S;
+    const g = this.full.getContext('2d')!, S = 900 / (this.bounds * 2), Xx = (v: number) => (v - this.cx + this.bounds) * S, Xz = (v: number) => (v - this.cz + this.bounds) * S;
     g.drawImage(this.mapImg, 0, 0, 900, 900);
-    for (const m of markers) { g.strokeStyle = m.color; g.lineWidth = 3; g.beginPath(); g.arc(X(m.x), X(m.z), 9, 0, 7); g.stroke(); }
-    if (objective) { g.fillStyle = '#ffa142'; g.beginPath(); g.arc(X(objective.x), X(objective.z), 9, 0, 7); g.fill(); }
-    g.fillStyle = '#fff'; g.beginPath(); g.arc(X(p.x), X(p.z), 6, 0, 7); g.fill();
+    for (const m of markers) { g.strokeStyle = m.color; g.lineWidth = 3; g.beginPath(); g.arc(Xx(m.x), Xz(m.z), 9, 0, 7); g.stroke(); }
+    if (objective) { g.fillStyle = '#ffa142'; g.beginPath(); g.arc(Xx(objective.x), Xz(objective.z), 9, 0, 7); g.fill(); }
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(Xx(p.x), Xz(p.z), 6, 0, 7); g.fill();
   }
   toggleMap(on?: boolean) { this.mapOpen = on ?? !this.mapOpen; this.fullWrap.style.display = this.mapOpen ? 'block' : 'none'; }
 
@@ -164,7 +164,7 @@ export class NavUI {
 
   ratingCard(job: JobDef, r: Rating, line: string) {
     const st = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
-    this.showCard(`<h2>DELIVERED</h2><p>${job.title}</p><div class="big">${st(r.stars)}</div>
+    this.showCard(`<h2>${job.type === 'trial' ? 'FINISHED' : job.type === 'dark' ? 'CLEAN RUN' : job.type === 'chase' ? 'SHAKEN + DELIVERED' : 'DELIVERED'}</h2><p>${job.title}</p><div class="big">${st(r.stars)}</div>
       <div class="row"><span>Time ${r.time.toFixed(1)} s</span><span class="st">${st(r.timeStars)}</span></div>
       <div class="row"><span>Style ${Math.round(r.style)}</span><span class="st">${st(r.styleStars)}</span></div>
       <div class="row"><span>Heat ${r.heat.toFixed(1)}</span><span class="st">${st(r.heatStars)}</span></div>

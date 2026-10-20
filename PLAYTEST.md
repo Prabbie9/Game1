@@ -65,3 +65,17 @@ Questions for a human (M3):
 3. Were the Ring, the tram line and the canal easy to find and fun to use as alternative routes?
 4. Do the crowds and hover traffic make the city feel alive, or do they look fake up close?
 5. Any stutters while driving fast across the district? (Note your GPU and the Quality setting.)
+
+## M4 — Core loop (fixers, jobs, heat, HUD, map, upgrades, save)
+**Status: bot/system proxies PASS. UNPLAYED: needs human.**
+Job routes driven by the bot in Node (Balanced, expert line with boost): Two Bowls for the Tram Crew 16.1 s / 34 s limit; Soup on the Ring 33.7 s / 60 s; Shake the Hound drive 28.5 s (+ shaking) / 170 s; Lights Out drive 22.7 s (+ sneaking) / 150 s. A human on a first run should land around 60–90 % of each limit.
+Heat fairness (`tools/fairness.ts`): warning meter before detection = 2.0 s (3.0 s with Stealth coils); darkness (exposure ≈ 0) and cover (under the Ring) → never detected; after detection, out of sight → lost after 7.0 s, heat back to 0 and all pursuers gone within 40 s. Roadblocks leave gaps between barriers (always an escape route).
+Browser job test (`tools/jobtest.mjs`): every job starts from NRC_DEBUG, deliveries complete with a rating card (time / style / heat → stars → credits), the dark run fails when a sweeper locks on, the chase spawns the Hound + heat drones, the Lantern Run counts all 7 gates and saves a ghost, credits/progress persist in localStorage, no console errors.
+HUD readability: dark plates behind compass, heat, timer, minimap; road contrast in gameplay captures 0.17 (higher than the cinematic shots because the HUD adds hard edges).
+
+Questions for a human (M4):
+1. Were the fixers easy to find from the map and the coloured rings? Was it clear what each job wanted?
+2. Did the timed delivery feel tight-but-fair, or did it feel impossible / trivially easy?
+3. Shaking the Hound: did breaking line of sight feel like a skill, and did the "hidden x / 6 s" counter help?
+4. In Lights Out, could you tell when a searchlight was about to catch you (warning bar, cone colour)? Did the 2 s grace feel fair?
+5. Are the rewards and the three upgrades worth chasing? Would you do another job right away?

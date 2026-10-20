@@ -6,6 +6,8 @@ import { ramp, rng } from './testarea';
 import { buildSlice, type SliceWorld } from './slice';
 import type { WalkSeg } from '../crowds/crowds';
 import type { Lane } from './traffic';
+import { addOldMarket } from './oldmarket';
+import { addNoodleBar } from './noodlebar';
 
 export type StacksWorld = SliceWorld & { walk: WalkSeg[]; lanes: Lane[]; tram: { a: [number, number, number]; b: [number, number, number] } };
 
@@ -163,7 +165,7 @@ export function buildStacks(): StacksWorld {
   for (let z = -340; z < 340; z += 24) boxes.push(box(334, 0, z, 352, 30 + R() * 70, z + 22, R() < 0.5 ? 'facade' : 'facadeB', { lit: 0.35, seed: Math.floor(R() * 1e6), surface: 'brick' }));
 
   // ---- zone boundary: tall walls of towers (fog swallows them) ----
-  for (const [x0, z0, x1, z1] of [[-360, -360, 360, -350], [-360, 350, 360, 360], [-360, -360, -350, 360]]) boxes.push(box(x0, 0, z0, x1, 60, z1, 'facade', { lit: 0.3, seed: Math.floor(R() * 1e6) }));
+  for (const [x0, z0, x1, z1] of [[-360, -360, 360, -350], [-360, 350, 360, 360]]) boxes.push(box(x0, 0, z0, x1, 60, z1, 'facade', { lit: 0.3, seed: Math.floor(R() * 1e6) }));
 
   // ---- hover traffic lanes over the streets ----
   for (const [x, a, b] of V) for (const [h, dir] of [[15, 1], [19, -1], [26, 1]] as [number, number][]) {
@@ -175,6 +177,8 @@ export function buildStacks(): StacksWorld {
   lanes.push({ a: [0, 16, 140], b: [0, 16, -10], cars: 3, speed: 20 }, { a: [3, 21, -10], b: [3, 21, 140], cars: 2, speed: 26 });
 
   W.walk = walk; W.lanes = lanes;
+  addOldMarket(W); // zone 2 to the west
+  addNoodleBar(W); // Hoshi interior (door teleports)
   W.tram = { a: [-330, TRAM.y, TRAM.z], b: [330, TRAM.y, TRAM.z] };
   W.spawn = { pos: [0, 1, 115], yaw: 0 };
   W.routes.cross = { pts: [[0, 115], [0, 220], [-130, 220], [-130, -230], [190, -230], [190, 220], [0, 220]], targetTime: [0, 0] };

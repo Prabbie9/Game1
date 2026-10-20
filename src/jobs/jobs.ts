@@ -2,19 +2,21 @@
 // upgrades and the localStorage save. No runtime AI: every line is written here.
 import * as THREE from 'three/webgpu';
 
-export type JobType = 'delivery' | 'chase' | 'dark';
+export type JobType = 'delivery' | 'chase' | 'dark' | 'trial';
 export interface Fixer { id: string; name: string; pos: [number, number, number]; color: string; pitch: number; greet: string[] }
 export interface JobDef {
   id: string; fixer: string; type: JobType; title: string; brief: string[];
   drop: [number, number, number]; dropName: string; time: number; reward: number;
   success: string; fail: string;
   sweepers?: [number, number, number][][]; // dark run patrol paths
+  checkpoints?: 'marketRun';                // time trial: checkpoint list provided by the world
 }
 
 export const FIXERS: Fixer[] = [
   { id: 'kiso', name: 'Mama Kiso', pos: [0, 0, 0], color: '#ffa142', pitch: 0.8, greet: ['Rain\'s good for business, courier. Hungry people tip.'] },
   { id: 'dex', name: 'Dex', pos: [290, 0, -50], color: '#19e6ff', pitch: 1.25, greet: ['You again. Good. I hate new faces near the water.'] },
   { id: 'volt', name: 'Volt', pos: [-130, 0, -172], color: '#ff2aa8', pitch: 1.05, greet: ['Lights off, mouth shut. That\'s the whole job description.'] },
+  { id: 'ume', name: 'Granny Ume', pos: [-354, 0, 70], color: '#ffd28a', pitch: 0.7, greet: ['The market lanterns go dark at midnight. Before that, they race.'] },
 ];
 
 export const JOBS: JobDef[] = [
@@ -35,6 +37,10 @@ export const JOBS: JobDef[] = [
     drop: [-300, 0, 236], dropName: 'Tram yard, far west', time: 150, reward: 360,
     sweepers: [[[-210, 16, -120], [-210, 16, 120], [-210, 16, -120]], [[-300, 16, 120], [-300, 16, -60], [-250, 16, 60]], [[-260, 16, 220], [-140, 16, 220], [-200, 16, 160]]],
     success: 'Clean. Not a single camera blinked. I might even remember your name.', fail: 'Every sweeper in the west saw your face. Go cool off and try again.' },
+  { id: 'ume_lanterns', fixer: 'ume', type: 'trial', title: 'Lantern Run', checkpoints: 'marketRun',
+    brief: ['Old courier tradition. Touch every lantern gate through the market, end back on the Ring ramp.', 'Your best run rides with you as a ghost. Beat yourself.'],
+    drop: [0, 0, 0], dropName: 'Lantern gates', time: 75, reward: 220,
+    success: 'Ha! The lanterns approve. Come back and beat that ghost.', fail: 'Too slow, the lanterns are out. Try again, child.' },
 ];
 
 export interface SaveData { credits: number; upgrades: Record<string, number>; done: Record<string, { stars: number; best: number }> }
@@ -65,7 +71,7 @@ export function rate(job: JobDef, elapsed: number, style: number, maxHeat: numbe
 export class JobRunner {
   job: JobDef | null = null;
   phase: 'idle' | 'active' | 'done' | 'failed' = 'idle';
-  t = 0; style = 0; maxHeat = 0; shakeT = 0; shaken = false;
-  start(job: JobDef) { this.job = job; this.phase = 'active'; this.t = 0; this.style = 0; this.maxHeat = 0; this.shakeT = 0; this.shaken = job.type !== 'chase'; }
+  t = 0; style = 0; maxHeat = 0; shakeT = 0; shaken = false; cp = 0;
+  start(job: JobDef) { this.job = job; this.phase = 'active'; this.t = 0; this.style = 0; this.maxHeat = 0; this.shakeT = 0; this.shaken = job.type !== 'chase'; this.cp = 0; }
   get objective(): THREE.Vector3 | null { return this.job && this.phase === 'active' ? new THREE.Vector3(...this.job.drop) : null; }
 }

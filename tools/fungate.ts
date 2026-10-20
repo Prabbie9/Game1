@@ -126,7 +126,7 @@ function spawn(x: number, z: number, yaw: number, y = 1) { const s = createState
   for (const [wname, SW] of [['slice', buildSlice()], ['stacks', buildStacks()]] as const) {
   const qs = new RapierWorld(RAPIER); qs.addBoxes(wname, SW.boxes);
   for (const [rname, R] of Object.entries(SW.routes)) {
-    if (wname === 'stacks' && !['cross', 'ring'].includes(rname)) continue;
+    if (wname === 'stacks' && !['cross', 'ring', 'market'].includes(rname)) continue;
     const name = wname + ':' + rname;
     const bot = new Bot({ pts: R.pts });
     const a = R.pts[0], b = R.pts[1];

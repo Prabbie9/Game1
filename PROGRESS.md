@@ -1,9 +1,10 @@
 # PROGRESS
-NEXT STEP: M4: capture look shots with a job active (waypoint beam + HUD), write M4 gate report to PROGRESS/PLAYTEST, smoke, checkpoint builds/M4-checkpoint.
+NEXT STEP: M5: build + browser-test on-foot (F to dismount, walk/sprint/jump, enter Hoshi interior via door), fix, then M5 gates + final shots + FINAL REPORT.md.
 
-PLAYABLE BUILD: M3 checkpoint (includes working M4 job loop) — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/.
+PLAYABLE BUILD: M4 checkpoint (jobs, heat, map, upgrades, save + Old Market, photo mode, ghosts, time trial) — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/.
 
 ## Done
+- M4: core loop (jobs, heat, HUD, map, upgrades, save); checkpoint builds/M4-checkpoint.
 - M3: Stacks zone + streaming, crowds, traffic, tram; checkpoint builds/M3-checkpoint.
 - M2: look slice (Hoshi Street), 3 look rounds, checkpoint builds/M2-checkpoint (smoke OK on file://).
 - M1: feel grey-box + mood test, gates self-checked, checkpoint builds/M1-checkpoint (smoke OK on file://).
@@ -40,8 +41,13 @@ PLAYABLE BUILD: M3 checkpoint (includes working M4 job loop) — hosted https://
 - LOOK GATE: round 1 captured (shots/m3r1_sheet.png, shot 8 = extra street-life view). Defects: hover-car underglow read as floating slabs (dimmed); Hoshi window desaturated to cream (more saturated amber, lower emissive); procedural side streets darker/sparser than Hoshi Street (accepted; fog + signs carry them). Crushed 0 %, clipped ≤ 0.02 %, road contrast 0.047–0.111.
 - Cut/changed: rooftops are visual only (no ramps to drive roofs) — scope cut, logged.
 
+## M4 report (core loop)
+- Built: 4 fixers (Mama Kiso at Hoshi, Dex at the canal, Volt at Wan Tower, Granny Ume in Old Market) with typewriter dialogue + synth blips; jobs: 2 timed deliveries, 1 chase (shake the faster Hound), 1 dark run (sweeper searchlights), + stretch time trial (Lantern Run). Ratings on time/style/heat → stars → credits. Heat 0–5: drones → low patrol flyers → roadblocks (with gaps); ambient sweepers in free roam; analytic visibility (light exposure, cone, LOS spatial hash, cover); 2 s warning meter. HUD: speed/boost/drift, heat pips, detection bar, compass with objective marker + distance, waypoint beam, minimap, full map (Tab), job timer panel, credits. Garage (pause menu): thrusters, boost tank, stealth coils. Save: localStorage (credits, upgrades, best ratings, ghosts).
+- FUN GATE: PASS (see PLAYTEST.md). UNPLAYED: needs human.
+- LOOK GATE: gameplay captures (shots/m4_gameplay_sheet.png) + reference shots re-captured (shots/m4_shot_*). Defects fixed: fixer beams washed over reference shot 5 (now hidden in shots/photo mode, subtler in play); job toasts overlap the compass (accepted); warm window still a little bright (emissive lowered again).
+
 ## In progress
-- M4 core loop (jobs, heat, HUD, map, upgrades, save) — implemented and browser-tested; gates next
+- M5 showpiece: photo mode DONE, Old Market DONE, ghost replays DONE, stretch job (time trial) DONE; on-foot + noodle bar interior next
 
 ## Decisions
 - three r186 (WebGPURenderer + RenderPipeline), Rapier compat 0.21 in a worker, Vite 7, TS 5.9.

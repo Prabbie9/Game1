@@ -97,8 +97,11 @@ export async function saveReferenceShots(g: Game) {
   files.push({ name: 'stats.json', data: new TextEncoder().encode(JSON.stringify({ ...g.stats(), ua: navigator.userAgent, when: new Date().toISOString() }, null, 1)) });
   g.setBot(null); g.releaseCam(); g.hud(true); g.setTime(23.5);
   g.physics.teleport(st.x, st.y, st.z, st.yaw);
-  const blob = zip(files), filename = 'night-courier-reference-shots.zip';
-  // hosted (claude.ai artifact): the viewer's downloads capability; offline file: a plain download link
+  await saveBlob(zip(files), 'night-courier-reference-shots.zip');
+}
+
+/** Hosted (claude.ai artifact): the viewer's downloads capability; offline file: a plain download link. */
+export async function saveBlob(blob: Blob, filename: string) {
   const dl = await (window as any).claude?.use?.('downloads').catch(() => null);
   if (dl) { try { await dl.save({ filename, data: blob }); } catch (e) { console.warn('save declined', e); } return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
