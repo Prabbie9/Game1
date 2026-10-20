@@ -12,7 +12,7 @@ export function makeMaterials(): Record<MatId, THREE.Material> {
     concrete: M.concrete(0x4d4f55), canalWall: M.concrete(0x34383c, 0.7), tunnel: M.concrete(0x3b3d42, 0.75),
     brick: M.facade('brick'), facade: M.facade('panel'), facadeB: M.facade('brick'), glass: M.metal(0x101418, 0.05),
     metal: M.metal(), roof: M.concrete(0x2a2b2e), grey: M.concrete(0x6a6c70), greyDark: M.concrete(0x1d1e22), hazard: M.hazard(),
-    water: M.water(),
+    water: M.water(), neonEdge: M.emissive(0x2fdcff, 2.2), neonMag: M.emissive(0xff2aa8, 2.4),
   };
 }
 

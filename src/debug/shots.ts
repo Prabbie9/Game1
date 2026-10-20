@@ -35,6 +35,10 @@ export const SLICE_SHOTS: Record<string, ShotDef> = {
   '7': { title: 'Underpass at speed', time: 23.6, bike: { pos: [12.5, 1, -33], yaw: A, speed: 26 }, bot: { pts: [[12.5, -33], [60.7, -102.4], [70, -115]] }, warm: 12, warmSec: 1.45 },
   '9': { title: 'Old Market lanterns (extra)', time: 23.6, cam: { pos: [-392, 2.4, 62.5], look: [-470, 4, 58], fov: 55 }, bike: { pos: [-404, 1, 59.5], yaw: Math.PI / 2 }, warm: 30 },
   '10': { title: 'Hoshi noodle bar interior (extra)', time: 23.6, cam: { pos: [4.6, -57.9, 3.4], look: [-1.5, -58.4, -2.6], fov: 58 }, bike: { pos: [1.5, 1, 90], yaw: 0 }, warm: 30 },
+  '11': { title: 'Rider close-up (extra)', time: 23.6, cam: { pos: [2.4, 1.7, 97.2], look: [0, 1.1, 100.2], fov: 45 }, bike: { pos: [0, 1, 100], yaw: 0 }, warm: 30 },
+  '13': { title: 'Bike side profile (extra)', time: 23.6, cam: { pos: [3.4, 1.35, 100.1], look: [0, 1.05, 100.1], fov: 40 }, bike: { pos: [0, 1, 100], yaw: 0 }, warm: 30 },
+  '14': { title: 'Procedural street: furniture + crowd (extra)', time: 23.6, cam: { pos: [-212.5, 1.8, 166], look: [-219, 1.2, 148], fov: 55 }, bike: { pos: [-205, 1, 175], yaw: 0 }, warm: 40 },
+  '12': { title: 'Fixer close-up: Dex (extra)', time: 23.6, cam: { pos: [287.2, 1.75, -48.6], look: [291.6, 1.25, -50], fov: 42 }, bike: { pos: [284, 1, -44], yaw: 0.6 }, warm: 30 },
   '8': { title: 'Stacks street life (extra)', time: 23.6, cam: { pos: [-121, 2.2, 228], look: [-60, 6, 214], fov: 55 }, bike: { pos: [-112, 1, 222], yaw: -Math.PI / 2 }, warm: 30 },
 };
 export const SHOTS = new Proxy({} as Record<string, ShotDef>, {

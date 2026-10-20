@@ -3,7 +3,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, float, vec2, vec3, color, uniform, mix, smoothstep, step, fract, floor, abs, max, min, sin, clamp, dot, length, normalize,
-  positionWorld, normalWorld, time, hash, mx_noise_float, mx_fractal_noise_float, bumpMap, attribute, select, exp,
+  positionWorld, normalWorld, time, hash, mx_noise_float, mx_fractal_noise_float, bumpMap, attribute, select, exp, cameraPosition,
 } from 'three/tsl';
 
 /** Global look uniforms driven by weather / time of day. */
@@ -97,7 +97,23 @@ export function facade(variant: 'panel' | 'brick') {
   const interior = mix(mix(warm, cool, step(0.62, r2)), mag, step(0.9, r2));
   const curtain = mix(float(1), smoothstep(0.2, 0.9, fv).mul(0.7).add(0.3), step(0.5, r3));
   const tv = step(0.93, r2).mul(sin(U.time.mul(7.0).add(r.mul(40.0))).mul(0.25).add(0.75).mul(U.flicker).add(float(1).sub(U.flicker)));
-  const winGlow = interior.mul(curtain).mul(r3.mul(r3).mul(1.6).add(0.15)).mul(lit).mul(mix(float(1), tv, step(0.93, r2)));
+  // interior mapping: march the view ray into a room box behind the window (cell-sized, 3 m deep) and shade
+  // whichever wall / floor / ceiling it hits, so lit windows show rooms with real parallax instead of flat tiles
+  const Vd = normalize(positionWorld.sub(cameraPosition));
+  const dx0 = dot(Vd, tan), dy0 = Vd.y, dz = max(dot(Vd, nW.negate()), 0.05);
+  const dx = select(dx0.greaterThanEqual(0), max(dx0, 0.001), min(dx0, -0.001)), dy = select(dy0.greaterThanEqual(0), max(dy0, 0.001), min(dy0, -0.001));
+  const px = fu.mul(cw), py = fv.mul(chh), RD = float(3.0);
+  const tX = select(dx.greaterThan(0), cw.sub(px), px.negate()).div(dx), tY = select(dy.greaterThan(0), chh.sub(py), py.negate()).div(dy), tZ = RD.div(dz);
+  const tt = min(min(tX, tY), tZ);
+  const hx = px.add(dx.mul(tt)).div(cw), hy = py.add(dy.mul(tt)).div(chh), hz = dz.mul(tt).div(RD);
+  const isBack = step(tZ, min(tX, tY)), isY = float(1).sub(isBack).mul(step(tY, tX)), isX = float(1).sub(isBack).sub(isY);
+  const isFloor = isY.mul(step(dy, 0.0)), isCeil = isY.sub(isFloor);
+  const lamp = isCeil.mul(smoothstep(0.35, 0.0, length(vec2(hx.sub(0.5), hz.sub(0.45))))).mul(2.5);
+  const furniture = isBack.mul(step(hy, mix(0.22, 0.38, r3))).mul(step(abs(hx.sub(r.mul(0.5).add(0.25))), 0.2)); // sofa / desk / shelf silhouette
+  const roomShade = isBack.mul(1.0).add(isX.mul(0.55)).add(isFloor.mul(0.28)).add(isCeil.mul(0.7)).add(lamp)
+    .mul(float(1).sub(furniture.mul(0.8))).mul(float(1).sub(hz.mul(0.4)));
+  const closed = step(0.72, r3); // some windows keep the old flat curtain look
+  const winGlow = interior.mul(mix(roomShade, curtain, closed)).mul(r3.mul(r3).mul(1.4).add(0.2)).mul(lit).mul(mix(float(1), tv, step(0.93, r2)));
   // wall surface
   const grime = mx_fractal_noise_float(vec3(u.mul(0.6), y.mul(0.05), seed), 3, 2.0, 0.5, 1.0);
   const streak = n2(vec2(u.mul(3.0), y.mul(0.08).add(seed))).mul(0.5).add(0.5);
@@ -117,8 +133,10 @@ export function facade(variant: 'panel' | 'brick') {
   // floor ledges + pilasters + dark frame around each window opening
   const ledge = smoothstep(0.035, 0.0, abs(fv.sub(0.04))).mul(vertical);
   const frame = winU.mul(winV).oneMinus().mul(smoothstep(0.18, 0.22, fu).mul(smoothstep(0.82, 0.78, fu)).mul(smoothstep(0.26, 0.3, fv)).mul(smoothstep(0.82, 0.78, fv)));
-  const wallCol = wall.mul(tint).mul(float(0.75).add(grime.mul(0.35))).mul(mix(float(1), streak.mul(0.5).add(0.55), U.wet))
+  const sill = smoothstep(0.24, 0.26, fu).mul(smoothstep(0.76, 0.74, fu)).mul(smoothstep(0.27, 0.29, fv)).mul(smoothstep(0.33, 0.31, fv)).mul(vertical).mul(float(1).sub(groundFloor));
+  const wallCol0 = wall.mul(tint).mul(float(0.75).add(grime.mul(0.35))).mul(mix(float(1), streak.mul(0.5).add(0.55), U.wet))
     .mul(float(1).sub(ledge.mul(0.45))).mul(float(1).sub(frame.mul(0.6)));
+  const wallCol = mix(wallCol0, vec3(0.32, 0.31, 0.3), sill.mul(0.8));
   const glass = vec3(0.02, 0.025, 0.03);
   // roofs (horizontal faces): dark tar
   const roof = vec3(0.05, 0.05, 0.055).mul(float(1).add(grime.mul(0.3)));

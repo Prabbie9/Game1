@@ -22,6 +22,9 @@ import { GameAudio } from './audio/audio';
 import { UI, loadSettings, saveSettings, loadingScreen, type Settings } from './ui/ui';
 import { Bot } from './bot/bot';
 import { Occlusion } from './heat/occlusion';
+import { buildCraft } from './heat/craft';
+import { propWarmGroup } from './world/kit';
+import { loadOverrides } from './assets/overrides';
 import { HeatSystem, Pursuer } from './heat/heat';
 import { NavUI } from './ui/nav';
 import { Career } from './jobs/career';
@@ -29,13 +32,18 @@ import { JOBS } from './jobs/jobs';
 import { SHOTS, setupShot, saveReferenceShots, captureCanvas, saveBlob } from './debug/shots';
 import { PhotoMode } from './ui/photo';
 import { Person } from './vehicle/person';
+import { loadHumans } from './characters/humans';
+import { Cast } from './characters/cast';
+import { HumanCrowd } from './characters/crowd';
 import { BAR } from './world/noodlebar';
 import type { WorldDef } from './world/defs';
 
 const params = new URLSearchParams(location.search);
 const CREDITS_HTML = `Design, code, procedural art, synth audio and music: generated for this project.<br><br>
-three.js (MIT) — mrdoob &amp; contributors<br>Rapier physics (Apache-2.0) — Dimforge<br>Vite, TypeScript (MIT / Apache-2.0)<br><br>
-No third-party textures, models or recordings are used in this build. See CREDITS.md.`;
+three.js (MIT) — mrdoob &amp; contributors<br>Rapier physics (Apache-2.0) — Dimforge<br>Vite, TypeScript (MIT / Apache-2.0)<br>meshoptimizer (MIT) — Arseny Kapoulkine (offline mesh simplification)<br><br>
+Human body, skeleton and animations: Universal Animation Library (Standard) — Quaternius, CC0 1.0<br>
+HUD font: Rajdhani — Indian Type Foundry, SIL Open Font License 1.1<br><br>
+Clothing, faces, vehicles, props, textures, music and sound: procedural, made for this project. See CREDITS.md.`;
 
 export interface Game {
   renderer: THREE.WebGPURenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; post: Post; world: WorldDef;
@@ -67,6 +75,7 @@ async function boot() {
   catch (e) { console.warn('WebGPU init failed, using WebGL2', e); document.querySelector('canvas')?.remove(); made = await createRenderer(document.body, true); }
   const { renderer, backend } = made;
   load.status('BUILDING THE DISTRICT'); await tick();
+  const humansP = loadHumans().catch((e) => { console.warn('character data failed to load, using fallback figures', e); return null; });
   const W = params.get('w') ? +params.get('w')! : innerWidth, H = params.get('h') ? +params.get('h')! : innerHeight;
   renderer.setSize(W, H, !params.get('w'));
   renderer.setPixelRatio(q.renderScale * Math.min(1.5, devicePixelRatio || 1));
@@ -89,12 +98,26 @@ async function boot() {
   const dressing = (world as SliceWorld).dressing;
   if (dressing) scene.add(buildHolos(dressing.holos));
   const SW = world as StacksWorld;
-  if (SW.walk) scene.add(new Crowds(SW.walk, q.tier === 'low' ? 0.025 : q.tier === 'medium' ? 0.04 : 0.055).group);
+  // crowds: skinned humans (pooled heroes → VAT instancing → silhouettes); old blob crowd only if the data failed
+  let crowd: HumanCrowd | null = null;
+  if (SW.walk) {
+    const hum = await humansP;
+    const dens = q.tier === 'low' ? 0.03 : q.tier === 'medium' ? 0.05 : 0.07;
+    if (hum) {
+      crowd = new HumanCrowd(hum, SW.walk, dens, q.tier === 'low' ? 3 : q.tier === 'medium' ? 6 : 10, q.tier === 'low' ? 10 : 15);
+      if (q.tier === 'low') { crowd.midR = 60; crowd.nearR = 15; crowd.farR = 220; }
+      load.status('DRESSING THE CROWDS'); await tick();
+      await crowd.bake(tick);
+      scene.add(crowd.group);
+    } else scene.add(new Crowds(SW.walk, dens).group);
+  }
   if (SW.lanes) scene.add(new Traffic(SW.lanes).group);
   const tram = SW.tram ? new Tram(scene, new THREE.Vector3(...SW.tram.a), new THREE.Vector3(...SW.tram.b)) : null;
   const pool = new LightPool(scene, q.lightPool, world.lights, world.neons);
   const rain = new Rain(scene, q.rain);
-  const bike = new BikeModel(scene, q.tier === 'high');
+  await loadOverrides((m) => load.status(m), tick); // assets/**/*.glb drop-ins (none bundled → no-op)
+  load.status('DRESSING THE CAST'); const humans = await humansP; await tick();
+  const bike = new BikeModel(scene, q.tier === 'high', !humans);
   const post = new Post(renderer, scene, camera, q.post);
 
 
@@ -140,9 +163,21 @@ async function boot() {
   // on foot (M5): parked bike pose, the courier figure, the cook inside Hoshi
   let onFoot = false; let inside = false; let fade = 0;
   const parked = { x: 0, y: 0, z: 0, yaw: 0 };
-  const courier = new Person(scene); courier.root.visible = false;
-  const cook = worldName === 'stacks' ? new Person(scene, 0x3a2418, 0xffa142) : null;
-  if (cook) cook.update(BAR.kiso[0], BAR.kiso[1] + 0.9, BAR.kiso[2], Math.PI, 0, true, 0);
+  // skinned cast (fallback: the old box figures if the character data could not load)
+  const cast = humans ? new Cast(scene, humans, bike.body) : null;
+  if (cast) { const [gl, gr] = cast.grips(bike.body); bike.hull.setGrips(gl, gr); }
+  const courier = cast ? null : new Person(scene); if (courier) courier.root.visible = false;
+  if (!cast && worldName === 'stacks') new Person(scene, 0x3a2418, 0xffa142).update(BAR.kiso[0], BAR.kiso[1] + 0.9, BAR.kiso[2], Math.PI, 0, true, 0);
+  if (cast && career) {
+    const faceYaw: Record<string, number> = { dex: -Math.PI / 2, volt: Math.PI / 2, ume: Math.PI / 2 };
+    const hh = world.anchors.hoshi;
+    for (const f of career.fixers) {
+      const yaw = f.id === 'kiso' && hh ? hh.yaw : faceYaw[f.id] ?? 0;
+      const back = 1.6; // stand just behind the ring, facing the street
+      cast.addFixer(f.id, [f.pos[0] - Math.sin(yaw) * back, f.pos[1], f.pos[2] - Math.cos(yaw) * back], yaw);
+    }
+    if (worldName === 'stacks') cast.addKiso([BAR.kiso[0], BAR.kiso[1] - 0.9, BAR.kiso[2]], 0);
+  }
   const fadeEl = document.createElement('div'); fadeEl.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .35s;z-index:6'; document.body.appendChild(fadeEl);
   const doFade = (then: () => void) => { fadeEl.style.opacity = '1'; setTimeout(() => { then(); setTimeout(() => { fadeEl.style.opacity = '0'; }, 250); }, 380); };
   const FOOT_CAM = { camDistance: 3.4, camHeight: 1.9, camPullBack: 0, camLookAhead: 0, camStiffness: 7, fovBase: 60, fovBoost: 0 };
@@ -172,7 +207,7 @@ async function boot() {
       const s = [...ft].sort((a, b) => a - b);
       const info = renderer.info as any;
       return { backend, frames, drawCalls: info.render?.drawCalls ?? info.render?.calls, triangles: info.render?.triangles, geometries: info.memory?.geometries, textures: info.memory?.textures,
-        streaming: streamer.stats(), frameMsP50: s[Math.floor(s.length * 0.5)] ?? 0, frameMsP99: s[Math.floor(s.length * 0.99)] ?? 0, heapMB: (performance as any).memory ? Math.round((performance as any).memory.usedJSHeapSize / 1048576) : null,
+        streaming: streamer.stats(), crowd: crowd?.stats, frameMsP50: s[Math.floor(s.length * 0.5)] ?? 0, frameMsP99: s[Math.floor(s.length * 0.99)] ?? 0, heapMB: (performance as any).memory ? Math.round((performance as any).memory.usedJSHeapSize / 1048576) : null,
         speed: simState.speed, pos: [simState.x, simState.y, simState.z] };
     },
     frameCount: () => frames, renderFrame: () => post.render(), hud: (v) => { ui.setHudVisible(v); if (career) career.showMarkers = v; },
@@ -232,11 +267,11 @@ async function boot() {
       if (a.pressed.interact && !(career.nearFixer)) {
         if (nearDoor && h) { doFade(() => { inside = true; physics.teleport(BAR.door[0], BAR.door[1] + 0.3, BAR.door[2] - 0.6, 0); }); }
         else if (nearExit && h) { doFade(() => { inside = false; physics.teleport(h.pos[0] + Math.sin(h.yaw) * 2.5, 1, h.pos[2] + Math.cos(h.yaw) * 2.5, h.yaw); }); }
-        else if (nearBike) { onFoot = false; physics.setMode('bike'); physics.teleport(parked.x, parked.y + 0.2, parked.z, parked.yaw); courier.root.visible = false; }
+        else if (nearBike) { onFoot = false; physics.setMode('bike'); physics.teleport(parked.x, parked.y + 0.2, parked.z, parked.yaw); if (courier) courier.root.visible = false; cast?.setOnFoot(false); }
         else if (!onFoot && simState.speed < 2 && simState.grounded) {
           onFoot = true; Object.assign(parked, { x: simState.x, y: simState.y, z: simState.z, yaw: simState.yaw });
           physics.setMode('foot'); physics.teleport(simState.x + Math.cos(simState.yaw) * 1.4, simState.y + 0.1, simState.z - Math.sin(simState.yaw) * 1.4, simState.yaw);
-          courier.root.visible = true;
+          if (courier) courier.root.visible = true; cast?.setOnFoot(true);
         }
       }
     }
@@ -253,8 +288,11 @@ async function boot() {
     nav.update({ x: simState.x, z: simState.z, yaw: simState.yaw }, Math.atan2(-(cam.tx - cam.x), -(cam.tz - cam.z)), career?.objective ?? null, career?.markers2D() ?? [], heat.heat, heat.meter, heat.seen);
     if (onFoot) {
       bike.update(parked, { ...simState, speed: 0, yawRate: 0, slip: 0, boosting: false, grounded: true, nx: 0, ny: 1, nz: 0 } as VehicleState, dt);
-      courier.update(pose.x, pose.y, pose.z, pose.yaw, simState.speed, simState.grounded, dt);
-    } else bike.update(pose, simState, dt);
+      courier?.update(pose.x, pose.y, pose.z, pose.yaw, simState.speed, simState.grounded, dt);
+      cast?.updateWalker(dt, pose.x, pose.y, pose.z, pose.yaw, simState.speed, simState.grounded);
+    } else { bike.update(pose, simState, dt); cast?.updateRider(dt, simState); }
+    cast?.updateNPCs(dt, camera.position);
+    crowd?.update(t, dt, camera);
     const look = input.consumeLook();
     const renderState = { ...simState, x: pose.x, y: pose.y, z: pose.z, yaw: pose.yaw };
     updateChase(cam, renderState, { ...tuning, ...(onFoot ? FOOT_CAM : {}), fovBase: (onFoot ? FOOT_CAM.fovBase : tuning.fovBase) + settings.fovOffset }, dt, look, () => physics.camFree);
@@ -311,7 +349,12 @@ async function boot() {
 
   // compile shaders in parallel in the background (progress shown), then warm the first frame behind the loading screen
   load.status('COMPILING SHADERS'); await tick();
+  // pursuit craft spawn mid-chase: compile their shared materials now (parked in front of the camera during compile only)
+  const craftWarm = new THREE.Group(); for (const k of ['drone', 'patrol', 'hound', 'sweeper'] as const) craftWarm.add(buildCraft(k));
+  craftWarm.add(propWarmGroup());
+  craftWarm.position.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(6)); scene.add(craftWarm);
   try { await post.compile(renderer, scene, camera, (d, n) => load.status(`COMPILING SHADERS ${d}/${n}`)); } catch (e) { console.warn('shader precompile failed', e); }
+  scene.remove(craftWarm);
   load.status('WARMING UP'); await tick();
   const T1 = performance.now(); post.render(); await tick(); post.render(); await tick();
   const warmMs = performance.now() - T1;

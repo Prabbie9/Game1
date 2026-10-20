@@ -2,6 +2,8 @@
 import * as THREE from 'three/webgpu';
 import { attribute, vec3, float, uniform } from 'three/tsl';
 import type { VehicleState } from './sim';
+import { buildHull, type HullHandles } from './bikeHull';
+import { override } from '../assets/overrides';
 
 function std(col: number, rough: number, metal: number) { const m = new THREE.MeshStandardNodeMaterial(); m.color = new THREE.Color(col); m.roughness = rough; m.metalness = metal; return m; }
 function glow(col: number, k: number) { const m = new THREE.MeshBasicNodeMaterial(); m.color = new THREE.Color(col).multiplyScalar(k); return m; }
@@ -14,36 +16,24 @@ export class BikeModel {
   trails: Trail[] = [];
   private lean = 0; private pitch = 0; private bob = 0;
   lightsOn = true;
-  constructor(scene: THREE.Scene, shadow: boolean) {
-    const paint = std(0x15161c, 0.25, 0.7), dark = std(0x08080a, 0.5, 0.4), chrome = std(0x9aa0aa, 0.15, 1.0);
+  hull!: HullHandles;
+  constructor(scene: THREE.Scene, shadow: boolean, withRider = true) {
     const add = (g: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
       const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); o.castShadow = true; this.body.add(o); return o;
     };
-    // hull
-    add(new THREE.CapsuleGeometry(0.32, 1.5, 6, 12), paint, 0, 0, 0, Math.PI / 2);
-    add(new THREE.BoxGeometry(0.5, 0.22, 1.2), paint, 0, 0.22, -0.35);
-    add(new THREE.BoxGeometry(0.62, 0.12, 0.7), dark, 0, 0.3, 0.45);           // seat
-    add(new THREE.CylinderGeometry(0.2, 0.28, 0.5, 14), dark, 0, 0.05, -1.05, Math.PI / 2); // nose intake
-    // rear thruster rings
-    for (const sx of [-0.3, 0.3]) {
-      add(new THREE.TorusGeometry(0.2, 0.05, 8, 18), chrome, sx, -0.05, 1.0);
-      add(new THREE.CircleGeometry(0.17, 18), glow(0x30e8ff, 6), sx, -0.05, 1.03);
-    }
-    // side fins + accent strips
-    for (const s of [-1, 1]) {
-      add(new THREE.BoxGeometry(0.04, 0.16, 1.4), glow(0xff2aa8, 5), s * 0.34, 0.02, -0.1);
-      add(new THREE.BoxGeometry(0.3, 0.04, 0.8), paint, s * 0.45, -0.12, 0.25, 0, 0, s * 0.25);
-    }
-    add(new THREE.BoxGeometry(0.5, 0.06, 0.06), glow(0xff1030, 8), 0, 0.2, 1.08);   // tail light
-    add(new THREE.BoxGeometry(0.34, 0.08, 0.04), glow(0xeaf6ff, 10), 0, 0.12, -1.32); // headlight face
-    add(new THREE.BoxGeometry(0.8, 0.03, 1.8), glow(0xff2aa8, 2.5), 0, -0.33, 0);     // under-glow plate
-    // rider
+    // hero hull (bikeHull.ts): fairings, pods, thruster bells, emitters, vanes, bars
+    this.hull = buildHull(this.body);
+    const ov = override('vehicles/bike'); // drop-in GLB (assets/WANTED.md) replaces the procedural hull
+    if (ov) { for (const c of this.body.children) c.visible = false; this.body.add(ov); }
+    add(new THREE.BoxGeometry(0.62, 0.02, 1.5), glow(0xff2aa8, 1.2), 0, -0.31, -0.05);     // faint under-glow sheet
+    if (withRider) { // fallback box rider (the skinned courier from characters/ replaces it when loaded)
     const suit = std(0x1a1b22, 0.6, 0.1);
     add(new THREE.CapsuleGeometry(0.2, 0.45, 4, 10), suit, 0, 0.72, 0.25, -0.75);
     add(new THREE.SphereGeometry(0.17, 14, 10), std(0x0c0d10, 0.2, 0.6), 0, 1.0, -0.05);
     add(new THREE.BoxGeometry(0.26, 0.05, 0.1), glow(0xff2aa8, 6), 0, 1.0, -0.19);    // visor
     add(new THREE.CapsuleGeometry(0.07, 0.4, 4, 8), suit, -0.22, 0.6, -0.2, -1.1);
     add(new THREE.CapsuleGeometry(0.07, 0.4, 4, 8), suit, 0.22, 0.6, -0.2, -1.1);
+    }
     this.root.add(this.body);
 
     this.head = new THREE.SpotLight(0xdff0ff, 60, 45, 0.42, 0.5, 1.6);
@@ -70,6 +60,16 @@ export class BikeModel {
     this.body.rotation.set(this.pitch + (s.boosting ? -0.04 : 0), 0, this.lean, 'YXZ');
     this.body.position.y = Math.sin(this.bob * 2.3) * 0.03 * (s.grounded ? 1 : 0);
     this.head.intensity = this.lightsOn ? 60 : 0;
+    // hull animation: vanes steer, flaps trim with pitch, thrusters/emitters glow with speed and boost
+    if (this.hull) {
+      const vane = Math.max(-0.5, Math.min(0.5, s.yawRate * 0.22));
+      this.hull.vanes.forEach((v) => { v.rotation.y += (vane - v.rotation.y) * Math.min(1, 10 * dt); });
+      const flap = Math.max(-0.4, Math.min(0.4, -s.vy * 0.05 + (s.boosting ? -0.25 : 0)));
+      this.hull.flaps.forEach((f) => { f.rotation.x += (flap - f.rotation.x) * Math.min(1, 6 * dt); });
+      const k = this.lightsOn ? 1 : 0.15;
+      this.hull.thrusterGlow.color.setRGB(0.19, 0.91, 1).multiplyScalar(k * (2.5 + speed * 0.12 + (s.boosting ? 7 : 0)));
+      this.hull.emitterGlow.color.setRGB(1, 0.16, 0.66).multiplyScalar(k * (2 + Math.sin(this.bob * 9) * 0.4 + (s.grounded ? 1 : 0)));
+    }
     this.under.intensity = this.lightsOn ? 6 + (s.boosting ? 6 : 0) : 0;
     this.body.updateMatrixWorld(true);
     for (const t of this.trails) t.update(this.body, speed, dt, this.lightsOn);

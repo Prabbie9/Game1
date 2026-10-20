@@ -4,6 +4,7 @@
 import { BoxDef, LightDef, NeonDef, WorldDef } from './defs';
 import { ramp, rng } from './testarea';
 import type { CableDef, HoloDef, PropDef, SteamDef } from './kit';
+import { furnishFace } from './furniture';
 
 export interface Dressing { props: PropDef[]; cables: CableDef[]; steam: SteamDef[]; holos: HoloDef[] }
 export type SliceWorld = WorldDef & { dressing: Dressing };
@@ -35,6 +36,7 @@ export function streetPath(step = 2): { x: number; z: number; yaw: number; s: nu
 
 export function buildSlice(opts: { embed?: boolean } = {}): SliceWorld {
   const R = rng(7);
+  const RF = rng(4242); // furniture stream (keeps the authored R sequence untouched)
   const boxes: BoxDef[] = [], neons: NeonDef[] = [], lights: LightDef[] = [];
   const props: PropDef[] = [], cables: CableDef[] = [], steam: SteamDef[] = [], holos: HoloDef[] = [];
   const path = streetPath(2);
@@ -122,6 +124,12 @@ export function buildSlice(opts: { embed?: boolean } = {}): SliceWorld {
           neons.push({ pos: [sx, 6 + R() * 8, sz], size: [1.2, 4 + R() * 3], yaw, color: col, text: words[Math.floor(R() * words.length)], vertical: true, flicker: R() < 0.2 ? 0.7 : 0, light: 16 });
         }
         if (R() < 0.5 && !isHoshi) neons.push({ pos: [fx - rx * side * 0.25, 4.6 + R() * 1.5, fz - rz * side * 0.25], size: [Math.min(w - 2, 6), 1.2], yaw: fyaw, color: palette[Math.floor(R() * palette.length)], text: words[Math.floor(R() * words.length)], light: 0 });
+        // street furniture, drainpipes and fire escapes (own RNG: the authored layout above is unchanged)
+        if (!isHoshi) {
+          furnishFace(props, boxes, RF, fx, fz, fyaw, w, null);
+          if (RF() < 0.5) { const al = (RF() - 0.5) * (w - 1.5); props.push({ kind: 'drain', pos: [fx + Math.cos(fyaw) * al, 0, fz - Math.sin(fyaw) * al], yaw: fyaw, size: [0, Math.min(h, 40), 0] }); }
+          if (h > 12 && w > 9 && RF() < 0.35) { const al = (RF() - 0.5) * (w - 5); props.push({ kind: 'fireesc', pos: [fx + Math.cos(fyaw) * al, 0, fz - Math.sin(fyaw) * al], yaw: fyaw, size: [3, Math.min(h - 2, 27), 1.1] }); }
+        }
         // AC units + balconies up the facade
         for (let k = 0; k < 4; k++) {
           const y = 5 + R() * Math.max(2, h - 8); if (y > h - 1) continue;
@@ -195,6 +203,22 @@ export function buildSlice(opts: { embed?: boolean } = {}): SliceWorld {
     for (let z = SKY.zRampTop; z > SKY.zEnd; z -= 14) {
       neons.push({ pos: [xx + side * 0.3, SKY.y + 0.6, z], size: [3, 0.25], yaw: side * Math.PI / 2, color: side < 0 ? '#ff2aa8' : '#19e6ff', text: '', light: 0 });
     }
+  }
+  // Skyway detail (render only): box girders under both deck edges with a glowing underside strip, pillar caps,
+  // and sign gantries arching over the deck
+  for (const side of [-1, 1]) {
+    const ex = SKY.x + side * (SKY.w / 2 - 0.3);
+    boxes.push(box(ex - 0.35, SKY.y - 2.1, SKY.zEnd, ex + 0.35, SKY.y - 1, SKY.zRampTop, 'metal', { collide: 'none' }));
+    boxes.push(box(ex - 0.06 + side * 0.36, SKY.y - 2.0, SKY.zEnd, ex + 0.06 + side * 0.36, SKY.y - 1.85, SKY.zRampTop, side < 0 ? 'neonMag' : 'neonEdge', { collide: 'none' }));
+    for (let z = SKY.zRampTop - 10; z > SKY.zEnd + 5; z -= 24) {
+      const px = SKY.x + side * (SKY.w / 2 - 0.8);
+      if (!path.some((q) => Math.hypot(q.x - px, q.z - z) < ROAD_HW + WALK + 0.8)) boxes.push(box(px - 1.1, SKY.y - 2.2, z - 1.1, px + 1.1, SKY.y - 1, z + 1.1, 'concrete', { collide: 'none' }));
+    }
+  }
+  for (const z of [40, -10, -60]) {
+    for (const side of [-1, 1]) boxes.push(box(SKY.x + side * (SKY.w / 2 + 0.6) - 0.2, SKY.y + 1.1, z - 0.2, SKY.x + side * (SKY.w / 2 + 0.6) + 0.2, SKY.y + 6.4, z + 0.2, 'metal', { collide: 'none' }));
+    boxes.push(box(SKY.x - SKY.w / 2 - 0.8, SKY.y + 6, z - 0.3, SKY.x + SKY.w / 2 + 0.8, SKY.y + 6.6, z + 0.3, 'metal', { collide: 'none' }));
+    neons.push({ pos: [SKY.x, SKY.y + 5.5, z - 0.35], size: [6, 1.0], yaw: Math.PI, color: '#19e6ff', text: 'SKYWAY', light: 0 });
   }
   // underside lights over the underpass (where the Skyway crosses the street)
   for (let z = -48; z > -84; z -= 6) lights.push({ pos: [SKY.x, SKY.y - 1.4, z], color: '#8ff0ff', intensity: 18, range: 12 });

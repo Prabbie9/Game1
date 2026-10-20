@@ -8,6 +8,7 @@ import type { WalkSeg } from '../crowds/crowds';
 import type { Lane } from './traffic';
 import { addOldMarket } from './oldmarket';
 import { addNoodleBar } from './noodlebar';
+import { furnishFace, roofClutter, solidProp } from './furniture';
 
 export type StacksWorld = SliceWorld & { walk: WalkSeg[]; lanes: Lane[]; tram: { a: [number, number, number]; b: [number, number, number] } };
 
@@ -41,6 +42,7 @@ const inRect = (x0: number, z0: number, x1: number, z1: number, R: { x0: number;
 export function buildStacks(): StacksWorld {
   const W = buildSlice({ embed: true }) as StacksWorld;
   const R = rng(2077);
+  const RF = rng(9001); // street furniture: own stream so the block/building layout stays byte-identical
   const { boxes, neons, lights } = W;
   const { props, cables, steam, holos } = W.dressing;
   const walk: WalkSeg[] = [], lanes: Lane[] = [];
@@ -81,7 +83,23 @@ export function buildStacks(): StacksWorld {
         const seed = Math.floor(R() * 1e6);
         boxes.push(box(lx0, 0, lz0, lx1, h, lz1, R() < 0.5 ? 'facade' : 'facadeB', { lit: 0.18 + R() * 0.35, seed, surface: 'brick' }));
         placed++;
+        if (!isWan && h > 14) roofClutter(props, RF, lx0, lz0, lx1, lz1, h);
+        // silhouette relief (render only): roof cornice + parapet, ground-floor fascia, a mid-height belt course on tall blocks
+        boxes.push(box(lx0 - 0.35, h - 0.7, lz0 - 0.35, lx1 + 0.35, h - 0.2, lz1 + 0.35, 'concrete', { collide: 'none' }));
+        boxes.push(box(lx0 - 0.1, h - 0.2, lz0 - 0.1, lx1 + 0.1, h + 0.9, lz0 + 0.25, 'concrete', { collide: 'none' }));
+        boxes.push(box(lx0 - 0.1, h - 0.2, lz1 - 0.25, lx1 + 0.1, h + 0.9, lz1 + 0.1, 'concrete', { collide: 'none' }));
+        if (!low) boxes.push(box(lx0 - 0.15, 4.2, lz0 - 0.15, lx1 + 0.15, 4.75, lz1 + 0.15, 'greyDark', { collide: 'none' }));
+        if (h > 40 && !isWan) { const yb = Math.round(h * 0.55 / 3.4) * 3.4 + 0.1; boxes.push(box(lx0 - 0.2, yb, lz0 - 0.2, lx1 + 0.2, yb + 0.35, lz1 + 0.2, 'concrete', { collide: 'none' })); }
         if (isWan) {
+          // Wan Tower silhouette: two glass setbacks, a lit crown, a needle spire and light fins up every corner (render only)
+          const cx = (lx0 + lx1) / 2, cz = (lz0 + lz1) / 2, hw = (lx1 - lx0) / 2, hd = (lz1 - lz0) / 2;
+          boxes.push(box(cx - hw + 2.5, h, cz - hd + 2.5, cx + hw - 2.5, h + 26, cz + hd - 2.5, 'glass', { collide: 'none' }));
+          boxes.push(box(cx - hw + 5.5, h + 26, cz - hd + 5.5, cx + hw - 5.5, h + 40, cz + hd - 5.5, 'glass', { collide: 'none' }));
+          for (const [y, ins] of [[h, 2.2], [h + 26, 5.2], [h + 40, 5.2]] as [number, number][]) boxes.push(box(cx - hw + ins, y - 0.3, cz - hd + ins, cx + hw - ins, y + 0.3, cz + hd - ins, 'neonMag', { collide: 'none' }));
+          boxes.push(box(cx - 0.5, h + 40, cz - 0.5, cx + 0.5, h + 82, cz + 0.5, 'metal', { collide: 'none' }));
+          boxes.push(box(cx - 0.18, h + 82, cz - 0.18, cx + 0.18, h + 84, cz + 0.18, 'neonMag', { collide: 'none' }));
+          for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) boxes.push(box(cx + sx * hw - 0.25, 6, cz + sz * hd - 0.25, cx + sx * hw + 0.25, h + 26, cz + sz * hd + 0.25, 'neonEdge', { collide: 'none' }));
+          for (let y = 30; y < h; y += 30) boxes.push(box(lx0 - 0.4, y, lz0 - 0.4, lx1 + 0.4, y + 0.5, lz1 + 0.4, 'concrete', { collide: 'none' }));
           holos.push({ pos: [(lx0 + lx1) / 2, 150, lz1 + 0.5], yaw: 0, size: [26, 26], color: '#3fe6ff', kind: 'face' });
           holos.push({ pos: [lx1 + 0.5, 120, (lz0 + lz1) / 2], yaw: Math.PI / 2, size: [30, 18], color: '#ff4fd0', kind: 'koi' });
           lights.push({ pos: [(lx0 + lx1) / 2, 168, (lz0 + lz1) / 2], color: '#ff2050', intensity: 0, range: 1 });
@@ -93,11 +111,12 @@ export function buildStacks(): StacksWorld {
         }
         // dress faces that front a street (each side of the lot on the block boundary)
         const faces: [number, number, number, number, number][] = []; // x, z (centre on face), yaw normal, width, side
-        if (lz1 >= fz1 - 0.1) faces.push([(lx0 + lx1) / 2, lz1, 0, lx1 - lx0, 0]);
-        if (lz0 <= fz0 + 0.1) faces.push([(lx0 + lx1) / 2, lz0, Math.PI, lx1 - lx0, 0]);
-        if (lx1 >= fx1 - 0.1) faces.push([lx1, (lz0 + lz1) / 2, Math.PI / 2, lz1 - lz0, 0]);
-        if (lx0 <= fx0 + 0.1) faces.push([lx0, (lz0 + lz1) / 2, -Math.PI / 2, lz1 - lz0, 0]);
-        for (const [cx, cz, yaw, fw] of faces) {
+        // 5th field: 1 = the face fronts a full-width street (zone-edge faces only have a narrow strip: no furniture there)
+        if (lz1 >= fz1 - 0.1) faces.push([(lx0 + lx1) / 2, lz1, 0, lx1 - lx0, j + 1 === zs.length - 1 ? 0 : 1]);
+        if (lz0 <= fz0 + 0.1) faces.push([(lx0 + lx1) / 2, lz0, Math.PI, lx1 - lx0, j === 0 ? 0 : 1]);
+        if (lx1 >= fx1 - 0.1) faces.push([lx1, (lz0 + lz1) / 2, Math.PI / 2, lz1 - lz0, i + 1 === xs.length - 1 ? 0 : 1]);
+        if (lx0 <= fx0 + 0.1) faces.push([lx0, (lz0 + lz1) / 2, -Math.PI / 2, lz1 - lz0, i === 0 ? 0 : 1]);
+        for (const [cx, cz, yaw, fw, wide] of faces) {
           const nx = Math.sin(yaw), nz = Math.cos(yaw), tx = Math.cos(yaw), tz = -Math.sin(yaw);
           const px = cx + nx * 0.06, pz = cz + nz * 0.06;
           const k = R();
@@ -108,6 +127,11 @@ export function buildStacks(): StacksWorld {
           if (R() < 0.45) neons.push({ pos: [px + nx * 0.2, 4.6 + R() * 1.4, pz + nz * 0.2], size: [Math.min(fw - 2, 6), 1.2], yaw, color: pal[Math.floor(R() * pal.length)], text: words[Math.floor(R() * words.length)], light: 0 });
           for (let q = 0; q < 3; q++) { const y = 5 + R() * Math.max(2, h - 8); if (y < h - 1) props.push({ kind: R() < 0.7 ? 'ac' : 'balcony', pos: [cx + tx * (R() - 0.5) * (fw - 2), y, cz + tz * (R() - 0.5) * (fw - 2)], yaw, size: [0.9, 0.6, 0.5] }); }
           if (R() < 0.12) steam.push({ pos: [cx + nx * 2.2, 0.2, cz + nz * 2.2], radius: 0.6, height: 4, tint: '#8a7aa8' });
+          // street furniture against this street-facing wall (the kerb side and the road stay clear)
+          if (wide) furnishFace(props, boxes, RF, cx, cz, yaw, fw, [fx0, fz0, fx1, fz1]);
+          // facade depth: drainpipes and zig-zag fire escapes (above head height, render only)
+          if (RF() < 0.55) { const al = (RF() - 0.5) * (fw - 1.5); props.push({ kind: 'drain', pos: [cx + tx * al + nx * 0.02, 0, cz + tz * al + nz * 0.02], yaw, size: [0, Math.min(h, 40), 0] }); }
+          if (h > 12 && fw > 9 && RF() < 0.4) { const al = (RF() - 0.5) * (fw - 5); props.push({ kind: 'fireesc', pos: [cx + tx * al, 0, cz + tz * al], yaw, size: [3, Math.min(h - 2, 27), 1.1] }); }
         }
       }
     }
@@ -125,6 +149,12 @@ export function buildStacks(): StacksWorld {
     }
     // cables across the street in front of the block's north edge
     if (R() < 0.6) cables.push({ a: [fx0 + 5, 9 + R() * 4, fz0 - 0.5], b: [fx0 + 5 + (R() - 0.5) * 6, 9 + R() * 4, fz0 - 19.5], sag: 1.2, laundry: R() < 0.25 });
+  }
+
+  // tram stops under the line (between portal frames, on the south sidewalk), facing the street
+  for (const x of [-240, -60, 156]) for (const [z, yaw] of [[TRAM.z - CORR, 0], [TRAM.z + CORR, Math.PI]] as [number, number][]) {
+    props.push({ kind: 'tramstop', pos: [x, 0.15, z], yaw, size: [5, 0, 0], seed: RF() * 100 });
+    solidProp(boxes, x, 0.15, z, yaw, 0, 0.45, 0.35, 2.3, 0.45, 0.35);
   }
 
   // ---- the Ring: elevated lane along z = -230 at +12 m ----

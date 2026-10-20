@@ -3,6 +3,9 @@
 import { FocusGroup } from '../input/focus';
 import { glyph, type ActionState } from '../input/actions';
 import { PRESETS, RANGES, type Tuning, cloneTuning } from '../vehicle/tuning';
+// HUD font: Rajdhani (SIL OFL 1.1, Indian Type Foundry) — inlined as base64 by the single-file build
+import raj500 from '@fontsource/rajdhani/files/rajdhani-latin-500-normal.woff2?url';
+import raj700 from '@fontsource/rajdhani/files/rajdhani-latin-700-normal.woff2?url';
 
 export interface Settings {
   tier: 'low' | 'medium' | 'high'; fovOffset: number; motionBlur: boolean; shake: boolean; reduceFlicker: boolean;
@@ -16,6 +19,8 @@ export function loadSettings(): Settings {
 export function saveSettings(s: Settings) { try { localStorage.setItem('nc.settings', JSON.stringify(s)); } catch { /* storage unavailable */ } }
 
 const CSS = `
+@font-face{font-family:"Rajdhani";font-weight:400 500;font-display:swap;src:url(${raj500}) format("woff2")}
+@font-face{font-family:"Rajdhani";font-weight:600 700;font-display:swap;src:url(${raj700}) format("woff2")}
 #nc-ui.nohud > :not(.menu):not(.tune){display:none!important}
 :root{--nc-bg:rgba(6,8,16,.82);--nc-fg:#e9f3ff;--nc-dim:#8a97b0;--nc-cyan:#19e6ff;--nc-mag:#ff2aa8;--nc-amb:#ffa142;--nc-font:"Rajdhani","Bahnschrift","Segoe UI","Roboto Condensed",system-ui,sans-serif}
 #nc-ui{position:fixed;inset:0;pointer-events:none;font-family:var(--nc-font);color:var(--nc-fg);user-select:none;z-index:5}

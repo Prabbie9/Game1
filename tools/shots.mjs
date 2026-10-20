@@ -2,12 +2,13 @@
 // Each query gets ?backend=webgl&w=960&h=540 added; shot queries wait for __SHOT_READY.
 import { serve, launch, openPage } from './browser.mjs';
 const [dir, prefix, ...queries] = process.argv.slice(2);
-const srv = await serve(dir, 8091);
+const PORT = +(process.env.PORT || 8091);
+const srv = await serve(dir, PORT);
 const b = await launch();
 let fail = 0;
 for (const [i, q] of queries.entries()) {
   const t0 = Date.now();
-  const { page, errors } = await openPage(b, `http://localhost:8091/index.html?backend=webgl&w=960&h=540&${q}`);
+  const { page, errors } = await openPage(b, `http://localhost:${PORT}/index.html?backend=webgl&w=960&h=540&${q}`);
   try {
     await page.waitForFunction(() => window.__NC_READY, null, { timeout: 240000 });
     if (q.includes('shot=')) await page.waitForFunction(() => window.__SHOT_READY, null, { timeout: 900000, polling: 1000 });

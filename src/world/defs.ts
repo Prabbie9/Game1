@@ -4,7 +4,7 @@
 export type Surface = 'asphalt' | 'concrete' | 'metal' | 'water' | 'brick' | 'glass';
 export type MatId =
   | 'asphalt' | 'sidewalk' | 'concrete' | 'brick' | 'metal' | 'facade' | 'facadeB' | 'glass'
-  | 'deck' | 'water' | 'canalWall' | 'roof' | 'grey' | 'greyDark' | 'hazard' | 'tunnel';
+  | 'deck' | 'water' | 'canalWall' | 'roof' | 'grey' | 'greyDark' | 'hazard' | 'tunnel' | 'neonEdge' | 'neonMag';
 
 /** Oriented box. Rotation is yaw (around Y) then pitch (around local X), radians. */
 export interface BoxDef {
@@ -18,6 +18,8 @@ export interface BoxDef {
   /** facade lit-window density 0..1 (facade materials only) */
   lit?: number;
   seed?: number;
+  /** false: collider only (the visual comes from the prop kit) */
+  render?: boolean;
 }
 
 export interface NeonDef {

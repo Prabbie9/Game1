@@ -8,7 +8,8 @@ import {
 import { mergeGeoms } from './build';
 import { U, distFade } from '../materials/materials';
 
-export type PropKind = 'shopwin' | 'shutter' | 'awning' | 'ac' | 'pipe' | 'lantern' | 'vent' | 'rail' | 'crate' | 'balcony' | 'warmwin';
+export type PropKind = 'shopwin' | 'shutter' | 'awning' | 'ac' | 'pipe' | 'lantern' | 'vent' | 'rail' | 'crate' | 'balcony' | 'warmwin'
+  | 'vending' | 'bin' | 'bench' | 'bollard' | 'barrier' | 'stall' | 'tramstop' | 'drain' | 'tank' | 'antenna' | 'dish' | 'signrig' | 'fireesc';
 export interface PropDef { kind: PropKind; pos: [number, number, number]; yaw: number; size: [number, number, number]; color?: string; seed?: number }
 export interface CableDef { a: [number, number, number]; b: [number, number, number]; sag: number; laundry?: boolean; r?: number }
 export interface SteamDef { pos: [number, number, number]; radius: number; height: number; tint?: string }
@@ -24,9 +25,17 @@ const withAttrs = (g: THREE.BufferGeometry, seed = 0) => {
   const n = g.attributes.position.count;
   if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
   g.setAttribute('pseed', new THREE.BufferAttribute(new Float32Array(n).fill(seed), 1));
+  g.setAttribute('pbase', new THREE.BufferAttribute(new Float32Array(n).fill(_base), 1));
   if (g.index === null) { const idx: number[] = []; for (let i = 0; i < n; i++) idx.push(i); g.setIndex(idx); }
   return g;
 };
+let _base = 0;
+/** Any geometry placed in a prop's local frame (x right, y up, z out of the wall / toward the street). */
+function geoAt(p: PropDef, g: THREE.BufferGeometry, ox = 0, oy = 0, oz = 0, rx = 0, ry = 0, rz = 0) {
+  g.rotateX(rx); g.rotateY(ry); g.rotateZ(rz); g.translate(ox, oy, oz); g.rotateY(p.yaw); g.translate(p.pos[0], p.pos[1], p.pos[2]);
+  return g;
+}
+const cyl = (r: number, h: number, seg = 8, r2 = r) => new THREE.CylinderGeometry(r2, r, h, seg);
 
 // ---- materials -------------------------------------------------------------------------
 /** Shop glass: warm interior glow with shelves/silhouette bands and a little parallax-free depth fake. */
@@ -85,6 +94,36 @@ function lanternMat() {
   m.emissiveNode = vec3(1.0, 0.18, 0.08).mul(float(1).sub(ribs.mul(0.8))).mul(3.5);
   return m;
 }
+/** Vending-machine / kiosk screen: bright product rows in one of four brand colours (a street light source). */
+function vendMat() {
+  const m = new THREE.MeshStandardNodeMaterial();
+  const s = attribute('pseed', 'float'), u = uv(), k = fract(s.mul(0.618));
+  const brand = mix(mix(vec3(0.3, 0.85, 1.0), vec3(1.0, 0.3, 0.7), step(0.3, k)), mix(vec3(1.0, 0.75, 0.3), vec3(0.5, 1.0, 0.6), step(0.85, k)), step(0.6, k));
+  const rows = step(0.18, fract(u.y.mul(4.0))).mul(step(0.12, fract(u.x.mul(5.0))));          // product slots
+  const can = smoothstep(0.5, 0.2, abs(fract(u.x.mul(5.0)).sub(0.56))).mul(step(0.3, fract(u.y.mul(4.0))));
+  m.colorNode = vec3(0.02);
+  m.roughnessNode = float(0.1); m.metalnessNode = float(0.0);
+  m.emissiveNode = mix(vec3(0.85, 0.9, 1.0), brand, can.mul(0.85)).mul(rows.mul(0.8).add(0.2)).mul(1.6);
+  return m;
+}
+/** Yellow/black chevrons (barriers, bollard bands). */
+function hazardMat() {
+  const m = new THREE.MeshStandardNodeMaterial();
+  const k = step(0.5, fract(positionWorld.x.add(positionWorld.z).add(positionWorld.y).mul(1.6)));
+  m.colorNode = mix(vec3(0.02, 0.02, 0.02), vec3(0.75, 0.5, 0.04), k);
+  m.roughnessNode = clamp(float(0.55).sub(U.wet.mul(0.35)), 0.12, 1); m.metalnessNode = float(0.1);
+  return m;
+}
+/** Painted street furniture: per-prop colour from pseed (vending bodies, bins, stall frames), wet sheen, a little grime low down. */
+function paintMat() {
+  const m = new THREE.MeshStandardNodeMaterial();
+  const s = attribute('pseed', 'float'), k = fract(s.mul(0.618));
+  const c = mix(mix(vec3(0.55, 0.06, 0.12), vec3(0.06, 0.28, 0.42), step(0.3, k)), mix(vec3(0.6, 0.45, 0.08), vec3(0.12, 0.13, 0.15), step(0.8, k)), step(0.55, k));
+  const grime = smoothstep(0.9, 0.0, positionWorld.y.sub(attribute('pbase', 'float'))).mul(0.5);
+  m.colorNode = c.mul(float(1).sub(grime)).mul(float(1).sub(U.wet.mul(0.25)));
+  m.roughnessNode = clamp(float(0.45).add(grime.mul(0.4)).sub(U.wet.mul(0.3)), 0.1, 1); m.metalnessNode = float(0.35);
+  return m;
+}
 function cableMat() { const m = new THREE.MeshStandardNodeMaterial(); m.color = new THREE.Color(0x050505); m.roughness = 0.4; m.metalness = 0.2; return m; }
 function clothMat() {
   const m = new THREE.MeshStandardNodeMaterial({ side: THREE.DoubleSide });
@@ -102,17 +141,96 @@ function propMats() {
   return _propMats ??= {
     shopwin: shopGlassMat(), warmwin: warmWinMat(), frame: plainStd(0x16171b, 0.4, 0.6), shutter: corrugated(0x4a4d52), awning: canvas(),
     metal: corrugated(0x5a5e66), dark: plainStd(0x0c0d10, 0.6, 0.3), lantern: lanternMat(), rail: plainStd(0x22252b, 0.3, 0.9),
+    hazard: hazardMat(), paint: paintMat(), vend: vendMat(),
   };
 }
 let _cableMat: THREE.Material | null = null, _clothMat: THREE.Material | null = null, _steamMat: THREE.Material | null = null;
 
 // ---- builders ---------------------------------------------------------------------------
+/** One tiny mesh per prop material, so compileAsync builds their shaders before play (chunks stream in later). */
+export function propWarmGroup() {
+  const g = new THREE.Group(), geo = new THREE.BoxGeometry(0.1, 0.1, 0.1); withAttrs(geo);
+  for (const m of [...Object.values(propMats()), _cableMat ??= cableMat(), _clothMat ??= clothMat()]) g.add(new THREE.Mesh(geo, m));
+  return g;
+}
 export function buildProps(props: PropDef[]) {
   const buckets: Record<string, THREE.BufferGeometry[]> = {};
   const put = (k: string, g: THREE.BufferGeometry, seed = 0) => { (buckets[k] ??= []).push(withAttrs(g, seed)); };
   for (const p of props) {
     const [sx, sy, sz] = p.size, seed = p.seed ?? 0;
+    _base = p.pos[1];
     switch (p.kind) {
+      // ---- street furniture (local frame: +z points away from the wall, toward the street) ----
+      case 'vending': {
+        put('paint', boxAt(p, 0.92, 1.9, 0.75, 0, 0.95, 0.375), seed);
+        { const g = new THREE.PlaneGeometry(0.62, 1.1); put('vend', geoAt(p, g, -0.08, 1.2, 0.765), seed); } // lit display
+        put('vend', boxAt(p, 0.04, 1.7, 0.04, 0.44, 0.95, 0.74), seed);                     // side light strip
+        put('dark', boxAt(p, 0.2, 0.5, 0.03, 0.33, 1.05, 0.76)); put('dark', boxAt(p, 0.7, 0.22, 0.05, 0, 0.32, 0.76)); // coin panel, tray
+        put('lantern', boxAt(p, 0.92, 0.06, 0.04, 0, 1.86, 0.76));
+        break;
+      }
+      case 'bin': {
+        put('paint', geoAt(p, cyl(0.28, 0.85, 10, 0.3), 0, 0.425, 0.35), seed); put('dark', geoAt(p, cyl(0.31, 0.06, 10), 0, 0.88, 0.35));
+        break;
+      }
+      case 'bench': {
+        for (const x of [-0.75, 0.75]) put('frame', boxAt(p, 0.06, 0.45, 0.45, x, 0.225, 0.55));
+        put('dark', boxAt(p, 1.8, 0.05, 0.45, 0, 0.45, 0.55)); put('dark', boxAt(p, 1.8, 0.4, 0.05, 0, 0.7, 0.32, -0.15));
+        break;
+      }
+      case 'bollard': { put('rail', geoAt(p, cyl(0.1, 0.9, 10), 0, 0.45, 0)); put('hazard', geoAt(p, cyl(0.105, 0.14, 10), 0, 0.72, 0)); break; }
+      case 'barrier': {
+        put('hazard', boxAt(p, sx, 0.32, 0.06, 0, 0.75, 0.3)); for (const x of [-sx / 2 + 0.1, sx / 2 - 0.1]) { put('rail', boxAt(p, 0.05, 0.9, 0.05, x, 0.45, 0.3)); put('rail', boxAt(p, 0.05, 0.05, 0.6, x, 0.03, 0.3)); }
+        put('lantern', geoAt(p, new THREE.SphereGeometry(0.06, 8, 6), sx / 2 - 0.1, 0.97, 0.3));
+        break;
+      }
+      case 'stall': {
+        const w = sx;
+        put('paint', boxAt(p, w, 0.95, 0.9, 0, 0.475, 0.75), seed); put('dark', boxAt(p, w + 0.1, 0.06, 1.0, 0, 0.98, 0.75));   // counter
+        for (const x of [-w / 2 + 0.05, w / 2 - 0.05]) put('rail', boxAt(p, 0.05, 2.4, 0.05, x, 1.2, 1.25));
+        put('awning', boxAt(p, w + 0.4, 0.05, 1.7, 0, 2.45, 0.75, 0.18), seed); put('frame', boxAt(p, w + 0.4, 0.12, 0.05, 0, 2.3, 1.6));
+        for (let i = 0; i < 3; i++) put('dark', boxAt(p, 0.35, 0.18, 0.28, -w / 2 + 0.4 + i * (w - 0.8) / 2, 1.1, 0.75));
+        put('lantern', geoAt(p, new THREE.SphereGeometry(0.16, 10, 8).scale(1, 1.3, 1), w / 2 - 0.3, 2.05, 1.45));
+        put('lantern', geoAt(p, new THREE.SphereGeometry(0.16, 10, 8).scale(1, 1.3, 1), -w / 2 + 0.3, 2.05, 1.45));
+        break;
+      }
+      case 'tramstop': {
+        const w = sx;
+        for (const x of [-w / 2 + 0.2, w / 2 - 0.2]) put('frame', boxAt(p, 0.1, 2.6, 0.1, x, 1.3, 0.2));
+        put('frame', boxAt(p, w, 0.08, 1.7, 0, 2.62, 0.75, -0.08)); put('shopwin', boxAt(p, w - 0.3, 0.02, 1.5, 0, 2.58, 0.75, -0.08), seed);
+        put('shopwin', boxAt(p, 1.2, 1.8, 0.04, -w / 2 + 0.9, 1.3, 0.12), seed + 0.3);           // lit ad panel
+        put('dark', boxAt(p, w - 1.8, 0.05, 0.4, 0.6, 0.45, 0.4)); put('frame', boxAt(p, 0.06, 0.45, 0.4, 0.6 - (w - 1.8) / 2, 0.225, 0.4)); put('frame', boxAt(p, 0.06, 0.45, 0.4, 0.6 + (w - 1.8) / 2, 0.225, 0.4));
+        put('lantern', boxAt(p, w * 0.6, 0.18, 0.06, 0, 2.85, 1.55));
+        break;
+      }
+      case 'drain': { put('rail', geoAt(p, cyl(0.07, sy, 8), 0, sy / 2, 0.12)); for (let y = 2; y < sy; y += 3) put('rail', boxAt(p, 0.2, 0.06, 0.16, 0, y, 0.06)); break; }
+      case 'tank': {
+        put('metal', geoAt(p, cyl(sx, sx * 1.4, 14), 0, 1.2 + sx * 0.7, 0)); put('frame', geoAt(p, new THREE.ConeGeometry(sx * 1.05, 0.5, 14), 0, 1.45 + sx * 1.4, 0));
+        for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put('rail', boxAt(p, 0.1, 1.2, 0.1, x * sx * 0.6, 0.6, z * sx * 0.6));
+        break;
+      }
+      case 'antenna': {
+        put('rail', geoAt(p, cyl(0.04, sy, 6, 0.02), 0, sy / 2, 0)); for (let y = sy * 0.5; y < sy; y += sy * 0.18) put('rail', boxAt(p, 1.2 * (1 - y / sy) + 0.2, 0.03, 0.03, 0, y, 0));
+        put('lantern', geoAt(p, new THREE.SphereGeometry(0.09, 6, 5), 0, sy + 0.05, 0));                 // aircraft warning light
+        break;
+      }
+      case 'dish': {
+        const g = new THREE.SphereGeometry(sx, 14, 6, 0, Math.PI * 2, 0, 0.9); put('frame', geoAt(p, g, 0, sx * 1.3, 0, -1.0)); put('rail', geoAt(p, cyl(0.06, sx * 1.3, 6), 0, sx * 0.65, 0));
+        break;
+      }
+      case 'signrig': { // scaffold frame on a roof edge carrying a big lit panel
+        for (const x of [-sx / 2, sx / 2]) put('rail', boxAt(p, 0.12, sy + 1.5, 0.12, x, (sy + 1.5) / 2, -0.4));
+        for (let y = 0.6; y < sy + 1.5; y += 1.4) put('rail', boxAt(p, sx, 0.06, 0.06, 0, y, -0.4));
+        put('shopwin', boxAt(p, sx - 0.2, sy, 0.05, 0, 1.5 + sy / 2 - 0.2, 0.0), seed); put('frame', boxAt(p, sx, 0.15, 0.25, 0, 1.4, 0.0));
+        break;
+      }
+      case 'fireesc': { // zig-zag fire escape: landings + rails + diagonal stairs, sx wide, sy tall, sz deep
+        for (let y = 3; y < sy; y += 3) {
+          put('metal', boxAt(p, sx, 0.06, sz, 0, y, sz / 2)); put('rail', boxAt(p, sx, 0.05, 0.04, 0, y + 0.95, sz)); put('rail', boxAt(p, 0.04, 0.95, 0.04, -sx / 2, y + 0.47, sz)); put('rail', boxAt(p, 0.04, 0.95, 0.04, sx / 2, y + 0.47, sz));
+          if (y + 3 < sy) { const L = Math.hypot(sx * 0.7, 3); const g = new THREE.BoxGeometry(L, 0.05, sz * 0.5); g.rotateZ(((y / 3) % 2 ? 1 : -1) * Math.atan2(3, sx * 0.7)); put('rail', geoAt(p, g, 0, y + 1.5, sz * 0.35)); }
+        }
+        break;
+      }
       case 'shopwin': {
         const g = new THREE.PlaneGeometry(sx, sy); g.rotateY(p.yaw); g.translate(...p.pos); put('shopwin', g, seed);
         put('frame', boxAt(p, sx + 0.3, 0.25, 0.3, 0, sy / 2 + 0.1, -0.05)); put('frame', boxAt(p, 0.15, sy, 0.25, -sx / 2, 0, -0.05)); put('frame', boxAt(p, 0.15, sy, 0.25, sx / 2, 0, -0.05));
@@ -139,7 +257,7 @@ export function buildProps(props: PropDef[]) {
 }
 
 function mergeProps(gs: THREE.BufferGeometry[]) {
-  for (const g of gs) for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'pseed'].includes(n)) g.deleteAttribute(n);
+  for (const g of gs) for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'pseed', 'pbase'].includes(n)) g.deleteAttribute(n);
   return mergeGeoms(gs);
 }
 

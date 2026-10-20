@@ -63,13 +63,14 @@ export class ChunkStreamer {
     const g = new THREE.Group();
     const byMat = new Map<MatId, THREE.BufferGeometry[]>();
     for (const b of boxes) {
+      if (b.render === false) continue;
       if (farOnly && b.h[1] < 2 && b.mat !== 'sidewalk') continue; // far LOD: skip small clutter
       if (!byMat.has(b.mat)) byMat.set(b.mat, []);
       byMat.get(b.mat)!.push(boxGeomFor(b));
     }
     for (const [mat, gs] of byMat) {
       const mesh = new THREE.Mesh(mergeGeoms(gs), this.mats[mat]);
-      mesh.receiveShadow = true; mesh.castShadow = !farOnly && !['asphalt', 'water', 'sidewalk'].includes(mat);
+      mesh.receiveShadow = true; mesh.castShadow = !farOnly && !['asphalt', 'water', 'sidewalk', 'neonEdge', 'neonMag'].includes(mat);
       g.add(mesh);
     }
     const kerb = kerbStripsFor(boxes);

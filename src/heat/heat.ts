@@ -5,6 +5,7 @@
 import * as THREE from 'three/webgpu';
 import { vec3, float, uv, abs, smoothstep, uniform, normalize, dot, positionView, normalView, time, sin } from 'three/tsl';
 import type { Occlusion } from './occlusion';
+import { buildCraft } from './craft';
 
 export type PursuerKind = 'drone' | 'patrol' | 'hound' | 'sweeper';
 const SPEC: Record<PursuerKind, { speed: number; alt: number; range: number; cone: number; color: number }> = {
@@ -20,21 +21,14 @@ export class Pursuer {
   pos = new THREE.Vector3(); vel = new THREE.Vector3(); aim = new THREE.Vector3(0, -1, 0);
   tracking = false; lastSeen = new THREE.Vector3(); lostT = 0; leaving = false; t = Math.random() * 10;
   mesh: THREE.Group; cone: THREE.Mesh; coneCol: any;
+  hull: THREE.Group; strobes: THREE.Object3D[] = []; rotors: THREE.Object3D[] = []; private yaw = 0;
   path: THREE.Vector3[] | null = null; pathI = 0;
   constructor(public kind: PursuerKind, scene: THREE.Scene, at: THREE.Vector3) {
     const S = SPEC[kind];
     this.pos.copy(at);
     this.mesh = new THREE.Group();
-    const bodyM = new THREE.MeshStandardNodeMaterial(); bodyM.color = new THREE.Color(0x14161c); bodyM.metalness = 0.7; bodyM.roughness = 0.3;
-    const glow = new THREE.MeshBasicNodeMaterial(); glow.color = new THREE.Color(S.color).multiplyScalar(6);
-    if (kind === 'patrol') {
-      this.mesh.add(new THREE.Mesh(new THREE.BoxGeometry(2, 0.7, 4.2), bodyM));
-      for (const [x, c] of [[-0.6, 0xff2040], [0.6, 0x2050ff]] as [number, number][]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.3), new THREE.MeshBasicNodeMaterial({ color: new THREE.Color(c).multiplyScalar(8) })); l.position.set(x, 0.45, 0); l.name = 'strobe'; this.mesh.add(l); }
-    } else {
-      this.mesh.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.35, 10), bodyM));
-      for (let i = 0; i < 4; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 6, 16), glow); r.rotation.x = Math.PI / 2; r.position.set(Math.cos(i * 1.57) * 1.0, 0.1, Math.sin(i * 1.57) * 1.0); this.mesh.add(r); }
-    }
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), glow); eye.position.y = -0.3; this.mesh.add(eye);
+    this.hull = buildCraft(kind); this.mesh.add(this.hull);
+    this.hull.traverse((o) => { if (o.name === 'strobe') this.strobes.push(o); else if (o.name === 'rotor') this.rotors.push(o); });
     // searchlight cone (fake volumetric): apex at the pursuer, opening toward `aim`
     const len = S.range, r = Math.tan(S.cone) * len;
     const g = new THREE.ConeGeometry(r, len, 24, 1, true); g.translate(0, -len / 2, 0);
@@ -48,7 +42,7 @@ export class Pursuer {
     this.mesh.add(this.cone);
     scene.add(this.mesh);
   }
-  dispose(scene: THREE.Scene) { scene.remove(this.mesh); this.mesh.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.geometry.dispose(); }); }
+  dispose(scene: THREE.Scene) { scene.remove(this.mesh); this.cone.geometry.dispose(); } // craft geometry is shared
 
   /** Can this pursuer see the player right now? (analytic) */
   sees(p: PlayerView, occ: Occlusion, exposure: number, covered: boolean) {
@@ -93,7 +87,11 @@ export class Pursuer {
     this.aim.lerp(a, 1 - Math.exp(-(this.tracking ? 6 : 2) * dt)).normalize();
     this.mesh.position.copy(this.pos);
     this.cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), this.aim);
-    this.mesh.traverse((o) => { if (o.name === 'strobe') (o as THREE.Mesh).visible = Pursuer.steadyStrobes || Math.sin(this.t * 14 + (o.position.x > 0 ? Math.PI : 0)) > 0; });
+    for (const o of this.strobes) o.visible = Pursuer.steadyStrobes || Math.sin(this.t * 14 + (o.position.x > 0 ? Math.PI : 0)) > 0;
+    for (const o of this.rotors) o.rotation.y += dt * 40;
+    // hull faces its velocity and banks into turns (the cone keeps its own world aim)
+    const hs = Math.hypot(this.vel.x, this.vel.z);
+    if (hs > 0.5) { const want = Math.atan2(-this.vel.x, -this.vel.z); let d = want - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); this.yaw += d * (1 - Math.exp(-3 * dt)); this.hull.rotation.set(-Math.min(0.25, hs * 0.008), this.yaw, Math.max(-0.5, Math.min(0.5, -d * 0.6)), 'YXZ'); }
   }
 }
 
