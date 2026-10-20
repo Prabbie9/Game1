@@ -5,7 +5,7 @@
 import * as THREE from 'three/webgpu';
 import {
   pass, mrt, output, normalView, metalness, roughness, velocity, vec2, vec3, vec4, float, uniform, screenUV, sample,
-  packNormalToRGB, unpackRGBToNormal, convertToTexture, smoothstep, length, mix, luminance, fract, floor, sin, time, clamp, max, uv, Fn,
+  packNormalToRGB, unpackRGBToNormal, convertToTexture, smoothstep, step, dot, normalize, positionView, length, mix, luminance, fract, floor, sin, time, clamp, max, uv, Fn,
 } from 'three/tsl';
 import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { film } from 'three/addons/tsl/display/FilmNode.js';
@@ -33,13 +33,14 @@ const lensDrops = Fn(([img, wet]: any[]) => {
   for (let L = 0; L < 2; L++) {
     const q = p.mul(L === 0 ? 1.0 : 2.3).add(L * 7.1);
     const cell = floor(q), f = fract(q);
-    const h1 = fract(sin(cell.x.mul(127.1).add(cell.y.mul(311.7)).add(L * 13)).mul(43758.5453));
-    const h2 = fract(sin(cell.x.mul(269.5).add(cell.y.mul(183.3)).add(L * 7)).mul(43758.5453));
+    const cx = cell.x.mod(61.0), cy = cell.y.mod(53.0);
+    const h1 = fract(sin(cx.mul(12.9898).add(cy.mul(78.233)).add(L * 1.37)).mul(43758.5453));
+    const h2 = fract(sin(cx.mul(39.3468).add(cy.mul(11.135)).add(L * 2.71)).mul(24634.6345));
     const life = fract(time.mul(0.12 + L * 0.07).add(h1.mul(9.0)));
     const ctr = vec2(h1.mul(0.6).add(0.2), h2.mul(0.6).add(0.2).add(life.mul(life).mul(0.25)));
     const r = h2.mul(0.18).add(0.07).mul(L === 0 ? 1.0 : 0.6);
     const d = f.sub(ctr);
-    const k = smoothstep(r, r.mul(0.7), length(d)).mul(smoothstep(1.0, 0.6, life)).mul(smoothstep(0.55, 0.85, h1.add(wet.mul(0.4))));
+    const k = smoothstep(r, r.mul(0.7), length(d)).mul(smoothstep(1.0, 0.6, life)).mul(step(0.72, fract(h1.mul(7.31).add(h2))));
     offs.addAssign(d.div(r).mul(k).mul(0.012));
     mask.addAssign(k);
   }
@@ -56,7 +57,11 @@ export class Post {
     const scenePass = pass(scene, camera);
     const needMRT = pq.ssr || pq.ao || pq.traa || pq.motionBlur;
     if (needMRT) {
-      scenePass.setMRT(mrt({ output, normal: packNormalToRGB(normalView), metalrough: vec2(metalness, roughness), velocity }));
+      // SSR weights reflections by the first channel, so write a reflectivity term instead of raw metalness:
+      // wet dielectrics (puddles, wet asphalt, glass) reflect by smoothness and Schlick-like grazing fresnel.
+      const ndv = clamp(dot(normalView, normalize(positionView).negate()), 0, 1);
+      const refl = max(metalness, smoothstep(0.5, 0.03, roughness).mul(float(0.12).add(float(1).sub(ndv).pow(4.0).mul(0.88))));
+      scenePass.setMRT(mrt({ output, normal: packNormalToRGB(normalView), metalrough: vec2(refl, roughness), velocity }));
       (scenePass.getTexture('normal') as THREE.Texture).type = THREE.UnsignedByteType;
       (scenePass.getTexture('metalrough') as THREE.Texture).type = THREE.UnsignedByteType;
     }
@@ -94,7 +99,7 @@ export class Post {
     this.stages.push('bloom');
     if (pq.anamorphic) {
       const bright = convertToTexture(vec4(max(imgT.rgb.sub(1.4), 0), 1));
-      const an = gaussianBlur(bright, vec2(14.0, 0.0), 4, { resolutionScale: 0.25 } as any);
+      const an = gaussianBlur(bright, vec2(2.0, 0.0), 12, { resolutionScale: 0.25 } as any); // small tap step: wide steps ghost lights into rows of discs
       img = img.add(an.rgb.mul(vec3(0.45, 0.65, 1.0)).mul(POST.anamorphic));
       this.stages.push('anamorphic');
     }
@@ -107,7 +112,7 @@ export class Post {
       this.stages.push('motionblur');
     }
     if (pq.lensDrops) { img = lensDrops(convertToTexture(img), POST.lensWet); this.stages.push('lensdrops'); }
-    if (pq.ca) { img = chromaticAberration(convertToTexture(img), POST.ca, null, float(1.05) as any); this.stages.push('ca'); }
+    if (pq.ca) { img = chromaticAberration(convertToTexture(img), POST.ca, vec2(0.5, 0.5) as any, float(1.05) as any); this.stages.push('ca'); }
     const r = length(screenUV.sub(0.5));
     const vig = float(1).sub(smoothstep(0.35, 0.95, r).mul(POST.vignette));
     this.pipeline.outputNode = film(vec4(img.rgb.mul(vig).mul(POST.exposure), 1), POST.grain);

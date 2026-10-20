@@ -54,10 +54,15 @@ function kerbStrips(boxes: BoxDef[]) {
   const gs: THREE.BufferGeometry[] = [];
   for (const b of boxes) {
     if (b.mat !== 'sidewalk') continue;
-    const [cx, cy, cz] = b.c, [hx, hy, hz] = b.h, y = cy + hy + 0.005;
-    const add = (x: number, z: number, sx: number, sz: number) => { const g = new THREE.BoxGeometry(sx, 0.02, sz); g.translate(x, y, z); g.deleteAttribute('uv'); gs.push(g); };
-    add(cx, cz - hz + 0.06, hx * 2, 0.08); add(cx, cz + hz - 0.06, hx * 2, 0.08);
-    add(cx - hx + 0.06, cz, 0.08, hz * 2); add(cx + hx - 0.06, cz, 0.08, hz * 2);
+    const [hx, hy, hz] = b.h;
+    tmpE.set(b.pitch ?? 0, b.yaw ?? 0, 0, 'YXZ'); tmpQ.setFromEuler(tmpE);
+    tmpM.compose(new THREE.Vector3(...b.c), tmpQ, new THREE.Vector3(1, 1, 1));
+    const add = (x: number, z: number, sx: number, sz: number) => {
+      const g = new THREE.BoxGeometry(sx, 0.02, sz); g.translate(x, hy + 0.005, z); g.applyMatrix4(tmpM); g.deleteAttribute('uv'); gs.push(g);
+    };
+    // long edges only (the ones facing the road); short ends would stripe across the pavement
+    if (hz >= hx) { add(-hx + 0.06, 0, 0.08, hz * 2); add(hx - 0.06, 0, 0.08, hz * 2); }
+    else { add(0, -hz + 0.06, hx * 2, 0.08); add(0, hz - 0.06, hx * 2, 0.08); }
   }
   return gs.length ? mergeGeoms(gs) : null;
 }

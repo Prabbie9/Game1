@@ -68,7 +68,7 @@ export const GRIPPY: Tuning = {
 export const DRIFTY: Tuning = {
   ...BALANCED,
   grip: 4.6, gripTransfer: 0.8, steerLow: 2.6, steerHigh: 1.45, steerResponse: 7,
-  driftGrip: 1.4, driftSteer: 2.1, driftMaxAngle: 0.8, driftCharge: 0.6, driftKick: 8, camLookAhead: 0.7,
+  driftGrip: 1.4, driftSteer: 2.1, driftMaxAngle: 0.8, driftCharge: 0.6, driftKick: 8, camLookAhead: 0.6,
 };
 
 export const PRESETS: Record<string, Tuning> = { Grippy: GRIPPY, Balanced: BALANCED, Drifty: DRIFTY };

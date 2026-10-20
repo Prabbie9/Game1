@@ -62,13 +62,13 @@ export class Rain {
     const ph = fract(cycle);
     const gen = cycle.sub(ph); // re-randomise position every cycle
     const rx = hash(gen.add(ss.x.mul(911.0))).sub(0.5).mul(44.0), rz = hash(gen.add(ss.y.mul(577.0))).sub(0.5).mul(44.0);
-    const size = ph.mul(0.22).add(0.04);
+    const size = ph.mul(0.3).add(0.08);
     const spos = vec3(this.cam.x.add(rx), this.groundY.add(0.03), this.cam.z.add(rz));
     sm.positionNode = spos.add(vec3(sco.x.mul(size), 0, sco.y.mul(size)));
     const rr = length(sco);
     const ring = smoothstep(0.65, 0.85, rr).mul(smoothstep(1.0, 0.85, rr));
-    const sfade = float(1).sub(ph).mul(smoothstep(24.0, 8.0, length(vec3(rx, 0, rz))));
-    sm.colorNode = vec3(0.6, 0.68, 0.85).mul(ring.mul(sfade).mul(this.intensity).mul(U.wet).mul(0.6));
+    const sfade = float(1).sub(ph).mul(smoothstep(14.0, 4.0, length(vec3(rx, 0, rz))));
+    sm.colorNode = vec3(0.6, 0.68, 0.85).mul(ring.mul(sfade).mul(this.intensity).mul(U.wet).mul(0.3));
     this.splash = new THREE.Mesh(sg, sm); this.splash.frustumCulled = false; this.splash.renderOrder = 9;
     scene.add(this.splash);
   }

@@ -3,6 +3,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { RapierWorld } from '../src/physics/query';
 import { buildTestArea } from '../src/world/testarea';
+import { buildSlice } from '../src/world/slice';
 import { createState, stepVehicle, SIM_DT, NO_INPUT, VehicleInput, VehicleState, teleport } from '../src/vehicle/sim';
 import { PRESETS } from '../src/vehicle/tuning';
 import { Bot } from '../src/bot/bot';
@@ -117,6 +118,31 @@ function spawn(x: number, z: number, yaw: number, y = 1) { const s = createState
   }
   out.course = { finished: bot.done, time: +t.toFixed(1), band: R.targetTime, inBand: t >= R.targetTime[0] && t <= R.targetTime[1], impacts, wallDeadStops: wallFails, maxStuckSec: +maxStuck.toFixed(2), drifts, boosts, hops,
     cameraClipFrames: clips, bikeOffViewFrames: offView, camFrames: frames, pass: bot.done && t >= R.targetTime[0] && t <= R.targetTime[1] && wallFails === 0 && clips === 0 && offView === 0 };
+}
+// 7. every route in the look slice: completes, in band, no dead-stops, camera never clips
+{
+  const SW = buildSlice(); const qs = new RapierWorld(RAPIER); qs.addBoxes('slice', SW.boxes);
+  const res: any = {};
+  for (const [name, R] of Object.entries(SW.routes)) {
+    const bot = new Bot({ pts: R.pts });
+    const a = R.pts[0], b = R.pts[1];
+    const s = createState(a[0], name === 'skyway' ? 1 : 1, a[1], Math.atan2(-(b[0] - a[0]), -(b[1] - a[1])));
+    for (let i = 0; i < 120; i++) stepVehicle(s, NO_INPUT, T, qs);
+    const cam = createChase(s);
+    const castArm = (p: [number, number, number], d: [number, number, number], len: number) => Math.max(0.3, qs.castSphere(p[0], p[1], p[2], d[0], d[1], d[2], len, 0.3) - 0.05);
+    let t = 0, clips = 0, deadStops = 0, lastImp = -9, impV = 0, minAfter = 99, maxStuck = 0, stuck = 0, acc = 0, water = 0, maxY = 0;
+    while (!bot.done && t < 200) {
+      stepVehicle(s, bot.drive(s, T), T, qs); t += SIM_DT;
+      if (s.surface === 'water' && s.grounded) water += SIM_DT; maxY = Math.max(maxY, s.y);
+      if (s.impact > 1 && t - lastImp > 0.6) { lastImp = t; impV = s.speed + s.impact; minAfter = 99; }
+      if (t - lastImp <= 0.5) minAfter = Math.min(minAfter, s.speed); else if (minAfter < 99) { if (impV > 5 && minAfter < 0.2 * impV) deadStops++; minAfter = 99; }
+      if (s.speed < 2) { stuck += SIM_DT; maxStuck = Math.max(maxStuck, stuck); } else stuck = 0;
+      acc += SIM_DT; if (acc >= 1 / 60) { acc -= 1 / 60; updateChase(cam, s, T, 1 / 60, { dx: 0, dy: 0 }, castArm); if (qs.insideSolid(cam.x, cam.y, cam.z, 0.12)) clips++; }
+    }
+    res[name] = { finished: bot.done, time: +t.toFixed(1), band: R.targetTime, deadStops, camClips: clips, maxStuck: +maxStuck.toFixed(1), waterSec: +water.toFixed(1), maxY: +maxY.toFixed(1),
+      pass: bot.done && t >= R.targetTime[0] && t <= R.targetTime[1] && deadStops === 0 && clips === 0 };
+  }
+  out.sliceRoutes = { ...res, pass: Object.values(res).every((r: any) => r.pass) };
 }
 out.pass = Object.values(out).every((v: any) => typeof v !== 'object' || v.pass !== false);
 console.log(JSON.stringify(out, null, 1));

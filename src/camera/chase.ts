@@ -53,9 +53,10 @@ export function updateChase(c: ChaseCam, s: VehicleState, T: Tuning, dt: number,
   c.armLen = Math.min(c.armLen, free);
   c.x = px + dx * c.armLen; c.y = py + dy * c.armLen; c.z = pz + dz * c.armLen;
   // look target: ahead of the bike, shifted into the turn
-  const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw), rx = Math.cos(s.yaw), rz = -Math.sin(s.yaw);
+  // aim along the heading/velocity blend so a wide drift angle never pushes the bike off-screen
+  const fx = -Math.sin(baseYaw), fz = -Math.cos(baseYaw), rx = Math.cos(baseYaw), rz = -Math.sin(baseYaw);
   const ahead = 2 + spd * 0.12;
-  const into = clamp(s.yawRate * T.camLookAhead * (0.5 + spd * 0.05), -4, 4);
+  const into = clamp(s.yawRate * T.camLookAhead * (0.5 + spd * 0.05), -2.5, 2.5);
   const tx = s.x + fx * ahead + rx * into, ty = s.y + 0.7, tz = s.z + fz * ahead + rz * into;
   const kt = 1 - Math.exp(-14 * dt);
   c.tx += (tx - c.tx) * kt; c.ty += (ty - c.ty) * kt; c.tz += (tz - c.tz) * kt;

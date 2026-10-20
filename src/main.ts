@@ -4,6 +4,8 @@ import { createRenderer, Atmosphere, TIERS } from './renderer/renderer';
 import { Post, POST } from './renderer/post';
 import { U } from './materials/materials';
 import { buildTestArea } from './world/testarea';
+import { buildSlice, type SliceWorld } from './world/slice';
+import { buildProps, buildCables, buildSteam, buildHolos } from './world/kit';
 import { buildWorld, makeMaterials, LightPool } from './world/build';
 import { PhysicsClient } from './physics/client';
 import { InputSystem, KeyboardMouse } from './input/actions';
@@ -47,9 +49,16 @@ async function boot() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(68, W / H, 0.1, 900);
-  const world = buildTestArea();
+  const worldName = params.get('world') ?? 'slice';
+  const world: WorldDef = worldName === 'test' ? buildTestArea() : buildSlice();
+  (window as any).__NC_WORLD = worldName;
   const atmo = new Atmosphere(scene, renderer, q.shadows);
   scene.add(buildWorld(world, makeMaterials()));
+  const dressing = (world as SliceWorld).dressing;
+  if (dressing) {
+    scene.add(buildProps(dressing.props)); scene.add(buildCables(dressing.cables));
+    scene.add(buildSteam(dressing.steam)); scene.add(buildHolos(dressing.holos));
+  }
   const pool = new LightPool(scene, q.lightPool, world.lights, world.neons);
   const rain = new Rain(scene, q.rain);
   const bike = new BikeModel(scene, q.tier === 'high');
@@ -84,7 +93,7 @@ async function boot() {
   const cam = createChase(simState);
   let bot: Bot | null = null;
   const botName = params.get('bot');
-  if (botName && world.routes[botName]) bot = new Bot({ pts: world.routes[botName].pts, hops: [[17, -90]] });
+  if (botName && world.routes[botName]) bot = new Bot({ pts: world.routes[botName].pts, hops: worldName === 'test' ? [[17, -90]] : [] });
   let frozenCam: { pos: THREE.Vector3; look: THREE.Vector3; fov: number } | null = null;
   let shake = 0, timeOfDay = 23.5, rainAmt = 1, t = 0, frames = 0;
   const camVel = new THREE.Vector3(), lastCam = new THREE.Vector3();
@@ -182,7 +191,9 @@ async function boot() {
     pool.update(camera.position);
     atmo.follow(new THREE.Vector3(simState.x, simState.y, simState.z));
     // covered = under the tunnel roof or the deck (cheap analytic test for audio)
-    const covered = (Math.abs(simState.z - 90) < 10 && Math.abs(simState.x) < 80 && simState.y < 6) || (Math.abs(simState.z + 90) < 7 && Math.abs(simState.x) < 100 && simState.y < 8);
+    const covered = worldName === 'test'
+      ? (Math.abs(simState.z - 90) < 10 && Math.abs(simState.x) < 80 && simState.y < 6) || (Math.abs(simState.z + 90) < 7 && Math.abs(simState.x) < 100 && simState.y < 8)
+      : Math.abs(simState.x - 35) < 6 && simState.z < 62 && simState.z > -96 && simState.y < 8;
     const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
     audio.update({ speed: simState.speed, boosting: simState.boosting, drifting: simState.drifting, slip: simState.slip, grounded: simState.grounded,
       onWater: simState.surface === 'water', rain: rainAmt, covered, cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z, fx: fwd.x, fz: fwd.z },
@@ -191,11 +202,12 @@ async function boot() {
     // speed-adaptive post: blur, DoF and CA ramp with speed so the frame stays readable when slow
     const sp01 = Math.min(1, Math.max(0, (simState.speed - 12) / 23));
     POST.bloomStrength.value = 0.5 + (simState.boosting ? 0.08 : 0);
-    POST.blurAmount.value = settings.motionBlur && !frozenCam ? 0.15 + sp01 * 0.55 : 0;
+    // velocity buffer is per-frame: normalise to a 60 fps reference so low frame rates don't over-blur
+    POST.blurAmount.value = settings.motionBlur && !frozenCam ? (0.05 + sp01 * 0.2) * Math.min(1, (1 / 60) / Math.max(dt, 1e-3)) : 0;
     POST.focusDist.value = frozenCam ? frozenCam.pos.distanceTo(frozenCam.look) : cam.armLen + 1;
-    POST.focalLen.value = frozenCam ? 40 : 90 - sp01 * 50;
-    POST.bokeh.value = frozenCam ? 1.2 : sp01 * 1.5;
-    POST.ca.value = (settings.reduceFlicker ? 0.3 : 1) * (0.15 + sp01 * 0.6 + (simState.boosting ? 0.4 : 0));
+    POST.focalLen.value = frozenCam ? 40 : 120;
+    POST.bokeh.value = frozenCam ? 1.0 : sp01 * 0.35; // gameplay: only a hint of far blur at speed
+    POST.ca.value = (settings.reduceFlicker ? 0.3 : 1) * (0.05 + sp01 * 0.12 + (simState.boosting ? 0.08 : 0));
     POST.lensWet.value = rainAmt * (covered ? 0 : 1) * Math.max(0, 1 - simState.speed / 30);
     post.render();
     if (!(window as any).__NC_MANUAL) requestAnimationFrame(frame);

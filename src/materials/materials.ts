@@ -79,7 +79,7 @@ export function facade(variant: 'panel' | 'brick') {
   const cu = u.div(cw), cv = y.div(chh);
   const fu = fract(cu), fv = fract(cv);
   // stable per-cell random (sin-hash on small numbers; uint hash showed per-pixel dropout on WebGL2)
-  const ci = floor(cu).mod(97.0), cj = floor(cv).mod(89.0), cs = seed.mod(53.0);
+  const ci = floor(cu).mod(97.0), cj = floor(cv).mod(89.0), cs = floor(seed.add(0.5)).mod(53.0); // round: interpolated attributes jitter
   const sh = (k: number) => fract(sin(ci.mul(12.9898 + k).add(cj.mul(78.233 - k)).add(cs.mul(37.719 + k))).mul(43758.5453));
   const r = sh(0), r2 = sh(1.7), r3 = sh(3.1);
   const winU = smoothstep(0.22, 0.25, fu).mul(smoothstep(0.78, 0.75, fu));

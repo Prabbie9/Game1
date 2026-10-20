@@ -11,8 +11,8 @@ export interface ShotDef {
   warm: number; // frames to settle (motion shots: frames of driving before capture)
 }
 
-// M1 shots are framed in the grey-box test area; M2 replaces them with the look-slice framings.
-export const SHOTS: Record<string, ShotDef> = {
+// Grey-box (M1) framings, used with ?world=test.
+export const TEST_SHOTS: Record<string, ShotDef> = {
   '1': { title: 'Wide street, dusk', time: 19.7, cam: { pos: [-150, 9, 176], look: [-60, 4, 181], fov: 55 }, bike: { pos: [-128, 1, 181], yaw: -Math.PI / 2 }, warm: 30 },
   '2': { title: 'Wide street, deep night', time: 23.6, cam: { pos: [-150, 9, 176], look: [-60, 4, 181], fov: 55 }, bike: { pos: [-128, 1, 181], yaw: -Math.PI / 2 }, warm: 30 },
   '3': { title: 'Steamy alley', time: 23.6, cam: { pos: [-74, 1.8, 96], look: [-40, 2.5, 90], fov: 52 }, bike: { pos: [-64, 1, 91], yaw: -Math.PI / 2 }, warm: 30 },
@@ -22,12 +22,28 @@ export const SHOTS: Record<string, ShotDef> = {
   '7': { title: 'Underpass at speed', time: 23.6, bike: { pos: [-110, 1, 90], yaw: -Math.PI / 2, speed: 28 }, bot: { pts: [[-110, 90], [80, 90], [180, 90]] }, warm: 90 },
 };
 
+const A = -35 * Math.PI / 180;
+// Look-slice framings (Hoshi Street).
+export const SLICE_SHOTS: Record<string, ShotDef> = {
+  '1': { title: 'Wide street, dusk', time: 19.8, cam: { pos: [3, 6.5, 122], look: [-2, 6, 45], fov: 58 }, bike: { pos: [1.5, 1, 99], yaw: 0 }, warm: 30 },
+  '2': { title: 'Wide street, deep night', time: 23.6, cam: { pos: [3, 6.5, 122], look: [-2, 6, 45], fov: 58 }, bike: { pos: [1.5, 1, 99], yaw: 0 }, warm: 30 },
+  '3': { title: 'Steamy alley', time: 23.6, cam: { pos: [-13, 1.8, 41.5], look: [-60, 4.5, 39.5], fov: 55 }, bike: { pos: [-25, 1, 40], yaw: Math.PI / 2 }, warm: 30 },
+  '4': { title: 'Wet-road neon reflection', time: 23.6, cam: { pos: [-3.5, 0.45, 76], look: [-1, 1.6, 52], fov: 50 }, bike: { pos: [2.5, 1, 66], yaw: 0.15 }, warm: 30 },
+  '5': { title: 'Storefront window glow', time: 23.6, cam: { pos: [3.5, 1.9, 67], look: [-10, 2.6, 58.5], fov: 50 }, bike: { pos: [-3.2, 1, 61.5], yaw: 0.5 }, warm: 30 },
+  '6': { title: 'Elevated lane at speed', time: 23.6, bike: { pos: [35, 11, 50], yaw: 0, speed: 30 }, bot: { pts: [[35, 50], [35, -96], [35, -140]] }, warm: 70 },
+  '7': { title: 'Underpass at speed', time: 23.6, bike: { pos: [12.5, 1, -33], yaw: A, speed: 26 }, bot: { pts: [[12.5, -33], [60.7, -102.4], [70, -115]] }, warm: 70 },
+};
+export const SHOTS = new Proxy({} as Record<string, ShotDef>, {
+  get: (_t, k: string) => ((window as any).__NC_WORLD === 'test' ? TEST_SHOTS : SLICE_SHOTS)[k],
+  ownKeys: () => Object.keys(SLICE_SHOTS), getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
+});
+
 const wait = (n: number, g: Game) => new Promise<void>((res) => { const f0 = g.frameCount(); const tick = () => (g.frameCount() - f0 >= n ? res() : requestAnimationFrame(tick)); tick(); });
 
 export async function setupShot(g: Game, id: string) {
   const s = SHOTS[id]; if (!s) return;
   (window as any).__SHOT_READY = false;
-  g.setTime(s.time); g.setRain(s.rain ?? 1); g.hud(false);
+  g.setTime(s.time); g.setRain(new URLSearchParams(location.search).has('rain') ? +new URLSearchParams(location.search).get('rain')! : s.rain ?? 1); g.hud(false);
   g.setBot(null); g.releaseCam();
   if (s.bike) g.physics.teleport(s.bike.pos[0], s.bike.pos[1], s.bike.pos[2], s.bike.yaw, s.bike.speed ?? 0);
   if (s.cam) g.freezeCam(s.cam.pos, s.cam.look, s.cam.fov);
