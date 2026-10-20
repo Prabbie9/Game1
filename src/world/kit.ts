@@ -9,7 +9,10 @@ import { mergeGeoms } from './build';
 import { U, distFade } from '../materials/materials';
 
 export type PropKind = 'shopwin' | 'shutter' | 'awning' | 'ac' | 'pipe' | 'lantern' | 'vent' | 'rail' | 'crate' | 'balcony' | 'warmwin'
-  | 'vending' | 'bin' | 'bench' | 'bollard' | 'barrier' | 'stall' | 'tramstop' | 'drain' | 'tank' | 'antenna' | 'dish' | 'signrig' | 'fireesc';
+  | 'vending' | 'bin' | 'bench' | 'bollard' | 'barrier' | 'stall' | 'tramstop' | 'drain' | 'tank' | 'antenna' | 'dish' | 'signrig' | 'fireesc'
+  | 'decal' | 'stool' | 'bowl' | 'jar';
+/** Decal types (PropDef.seed integer part; fract = per-decal random). Ground decals lie flat; posters stand on a wall. */
+export const DECAL = { dash: 0, dashY: 1, zebra: 2, grime: 4, crack: 5, poster: 6, manhole: 7 } as const;
 export interface PropDef { kind: PropKind; pos: [number, number, number]; yaw: number; size: [number, number, number]; color?: string; seed?: number }
 export interface CableDef { a: [number, number, number]; b: [number, number, number]; sag: number; laundry?: boolean; r?: number }
 export interface SteamDef { pos: [number, number, number]; radius: number; height: number; tint?: string }
@@ -91,7 +94,7 @@ function lanternMat() {
   const m = new THREE.MeshStandardNodeMaterial();
   const ribs = step(0.85, fract(positionLocal.y.mul(7.0)));
   m.colorNode = vec3(0.3, 0.02, 0.02);
-  m.emissiveNode = vec3(1.0, 0.18, 0.08).mul(float(1).sub(ribs.mul(0.8))).mul(3.5);
+  m.emissiveNode = vec3(1.0, 0.18, 0.08).mul(float(1).sub(ribs.mul(0.8))).mul(2.6);
   return m;
 }
 /** Vending-machine / kiosk screen: bright product rows in one of four brand colours (a street light source). */
@@ -104,6 +107,41 @@ function vendMat() {
   m.colorNode = vec3(0.02);
   m.roughnessNode = float(0.1); m.metalnessNode = float(0.0);
   m.emissiveNode = mix(vec3(0.85, 0.9, 1.0), brand, can.mul(0.85)).mul(rows.mul(0.8).add(0.2)).mul(1.6);
+  return m;
+}
+/** All decals in one alpha-tested material (no sorting, no extra passes): worn road paint, dry patches that break
+ *  up the wet reflections, cracks, manhole covers and torn wall posters. Type = floor(pseed), random = fract. */
+function decalMat() {
+  const m = new THREE.MeshStandardNodeMaterial({ alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const s = attribute('pseed', 'float'), t = floor(s), r = fract(s), u = uv(), pw = positionWorld;
+  const is = (k: number) => step(abs(t.sub(k)), float(0.5));
+  const n1 = mx_noise_float(pw.mul(vec3(2.5, 2.5, 2.5)).add(r.mul(50.0)));
+  const fbm = mx_fractal_noise_float(pw.mul(0.35).add(r.mul(31.0)), 3, 2.0, 0.5, 1.0);
+  // road paint: worn (noise holes), white or yellow
+  const paintMask = step(-0.35, n1);
+  const paintCol = mix(vec3(0.62, 0.62, 0.6), vec3(0.7, 0.48, 0.06), is(1));
+  // dry / grime patch: soft blob from the uv centre, broken up by fbm
+  const blob = smoothstep(0.5, 0.15, length(u.sub(0.5))).add(fbm.mul(0.6)).sub(0.25);
+  // crack: thin meandering line along v
+  const crack = smoothstep(0.035, 0.0, abs(u.x.sub(0.5).add(mx_noise_float(vec3(u.y.mul(6.0), r.mul(9.0), 0)).mul(0.3)))).mul(smoothstep(0.0, 0.1, u.y)).mul(smoothstep(1.0, 0.9, u.y));
+  // poster: two-tone print with a big glyph block and text bars, torn bottom edge
+  const pk = fract(r.mul(7.31));
+  const pbg = mix(mix(vec3(0.75, 0.12, 0.2), vec3(0.08, 0.5, 0.65), step(0.33, pk)), vec3(0.85, 0.7, 0.2), step(0.7, pk));
+  const glyph = step(abs(u.x.sub(0.5)), float(0.3)).mul(step(abs(u.y.sub(0.62)), float(0.22))).mul(step(0.45, fract(u.x.mul(3.0).add(u.y.mul(2.0)).add(r))));
+  const bars = step(0.5, fract(u.y.mul(14.0))).mul(step(u.y, float(0.33))).mul(step(0.12, u.x)).mul(step(u.x, float(0.88))).mul(step(0.1, u.y));
+  const posterCol = mix(mix(pbg, vec3(0.05, 0.04, 0.05), glyph), vec3(0.9, 0.9, 0.85), bars.mul(0.8));
+  const torn = step(mx_noise_float(vec3(u.x.mul(14.0), r.mul(20.0), 0)).mul(0.08).add(0.06), u.y);
+  // manhole: disc with concentric ribs
+  const d = length(u.sub(0.5)), disc = step(d, float(0.48)), ribs = step(0.5, fract(d.mul(18.0)));
+  const mask = paintMask.mul(is(0).add(is(1)).add(is(2))).add(step(0.0, blob).mul(is(4))).add(step(0.5, crack).mul(is(5))).add(torn.mul(is(6))).add(disc.mul(is(7)));
+  m.opacityNode = clamp(mask, 0, 1);
+  const col = paintCol.mul(is(0).add(is(1)).add(is(2)))
+    .add(vec3(0.035, 0.034, 0.033).mul(is(4))).add(vec3(0.008).mul(is(5)))
+    .add(posterCol.mul(float(1).sub(fbm.mul(0.3))).mul(is(6))).add(vec3(0.1, 0.1, 0.11).mul(ribs.mul(0.4).add(0.6)).mul(is(7)));
+  m.colorNode = col.mul(mix(float(1), float(0.75), U.wet));
+  // dry patches and cracks stay rough (no reflections), paint and posters get a wet sheen, metal covers glint
+  m.roughnessNode = clamp(float(0.4).sub(U.wet.mul(0.25)).add(is(4).mul(0.6)).add(is(5).mul(0.5)).add(is(7).mul(-0.1)), 0.06, 1);
+  m.metalnessNode = is(7).mul(0.7);
   return m;
 }
 /** Yellow/black chevrons (barriers, bollard bands). */
@@ -141,7 +179,7 @@ function propMats() {
   return _propMats ??= {
     shopwin: shopGlassMat(), warmwin: warmWinMat(), frame: plainStd(0x16171b, 0.4, 0.6), shutter: corrugated(0x4a4d52), awning: canvas(),
     metal: corrugated(0x5a5e66), dark: plainStd(0x0c0d10, 0.6, 0.3), lantern: lanternMat(), rail: plainStd(0x22252b, 0.3, 0.9),
-    hazard: hazardMat(), paint: paintMat(), vend: vendMat(),
+    hazard: hazardMat(), paint: paintMat(), vend: vendMat(), decal: decalMat(),
   };
 }
 let _cableMat: THREE.Material | null = null, _clothMat: THREE.Material | null = null, _steamMat: THREE.Material | null = null;
@@ -224,6 +262,14 @@ export function buildProps(props: PropDef[]) {
         put('shopwin', boxAt(p, sx - 0.2, sy, 0.05, 0, 1.5 + sy / 2 - 0.2, 0.0), seed); put('frame', boxAt(p, sx, 0.15, 0.25, 0, 1.4, 0.0));
         break;
       }
+      case 'stool': { put('rail', geoAt(p, cyl(0.03, 0.7, 8), 0, 0.35, 0)); put('rail', geoAt(p, cyl(0.16, 0.02, 12), 0, 0.02, 0)); put('paint', geoAt(p, cyl(0.19, 0.07, 14, 0.2), 0, 0.73, 0), seed); break; }
+      case 'bowl': { const g = new THREE.LatheGeometry([new THREE.Vector2(0.04, 0), new THREE.Vector2(0.09, 0.02), new THREE.Vector2(0.12, 0.08), new THREE.Vector2(0.115, 0.085), new THREE.Vector2(0.0, 0.07)], 14); put('paint', geoAt(p, g, 0, 0, 0), seed); break; }
+      case 'jar': { put('paint', geoAt(p, cyl(sx, sy, 10), 0, sy / 2, 0), seed); put('dark', geoAt(p, cyl(sx * 0.7, 0.03, 10), 0, sy + 0.015, 0)); break; }
+      case 'decal': { // size: [width, length, vertical?]; flat decals are lifted 1 cm, posters 3 cm off the wall
+        const g = new THREE.PlaneGeometry(sx, sy);
+        if (sz) put('decal', geoAt(p, g, 0, 0, 0.03), seed); else put('decal', geoAt(p, g, 0, 0.012, 0, -Math.PI / 2), seed);
+        break;
+      }
       case 'fireesc': { // zig-zag fire escape: landings + rails + diagonal stairs, sx wide, sy tall, sz deep
         for (let y = 3; y < sy; y += 3) {
           put('metal', boxAt(p, sx, 0.06, sz, 0, y, sz / 2)); put('rail', boxAt(p, sx, 0.05, 0.04, 0, y + 0.95, sz)); put('rail', boxAt(p, 0.04, 0.95, 0.04, -sx / 2, y + 0.47, sz)); put('rail', boxAt(p, 0.04, 0.95, 0.04, sx / 2, y + 0.47, sz));
@@ -251,7 +297,7 @@ export function buildProps(props: PropDef[]) {
   const mats = propMats();
   const g = new THREE.Group();
   for (const [k, gs] of Object.entries(buckets)) {
-    const mesh = new THREE.Mesh(mergeProps(gs), mats[k]); mesh.castShadow = k !== 'shopwin' && k !== 'warmwin'; mesh.receiveShadow = true; g.add(mesh);
+    const mesh = new THREE.Mesh(mergeProps(gs), mats[k]); mesh.castShadow = k !== 'shopwin' && k !== 'warmwin' && k !== 'decal'; mesh.receiveShadow = true; g.add(mesh);
   }
   return g;
 }
@@ -340,31 +386,43 @@ function steamMat() {
 }
 
 /** Hologram billboards: scanline emissive patterns with flicker (honours reduce-flicker). */
+/** Holograms: one shared material per kind (colour + flicker seed are per-object uniforms), so every
+ *  hologram of a kind reuses one GPU program. */
+const _holoMats = new Map<string, THREE.Material>();
+function holoMat(kind: HoloDef['kind']) {
+  const hit = _holoMats.get(kind); if (hit) return hit;
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, forceSinglePass: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+  const col = uniform(new THREE.Color()).onObjectUpdate((f: any) => f.object.userData.holoCol);
+  const seed = uniform(0).onObjectUpdate((f: any) => f.object.userData.holoSeed);
+  const u = uv();
+  let shape;
+  if (kind === 'koi') {
+    const t = time.mul(0.6);
+    const p = u.sub(0.5).mul(vec2(1.6, 1.0));
+    const body = smoothstep(0.08, 0.0, abs(p.y.sub(sin(p.x.mul(6.0).add(t.mul(3.0))).mul(0.08))).sub(float(0.12).mul(float(1).sub(abs(p.x).mul(1.6)))));
+    shape = body.mul(step(abs(p.x), float(0.62)));
+  } else if (kind === 'face') {
+    const p = u.sub(0.5);
+    const head = smoothstep(0.32, 0.3, length(p.mul(vec2(1.3, 1.0))));
+    const eyes = smoothstep(0.05, 0.03, length(vec2(abs(p.x).sub(0.1), p.y.sub(0.05))));
+    shape = head.mul(0.35).add(eyes).add(smoothstep(0.31, 0.3, length(p.mul(vec2(1.3, 1.0)))).sub(smoothstep(0.29, 0.28, length(p.mul(vec2(1.3, 1.0))))).mul(2.0));
+  } else {
+    const bars = step(0.5, fract(u.x.mul(8.0).add(time.mul(0.5)))).mul(step(0.2, u.y)).mul(step(u.y, float(0.8)));
+    shape = bars.mul(0.6).add(step(0.94, fract(u.y.mul(5.0))));
+  }
+  const scan = sin(u.y.mul(220.0).sub(time.mul(8.0))).mul(0.25).add(0.75);
+  const rnd = fract(sin(floor(time.mul(4.0)).add(seed).mul(12.9898)).mul(43758.5453)); // cheap per-holo flicker
+  const fl = float(1).sub(step(0.9, rnd).mul(0.5).mul(U.flicker));
+  const edge = smoothstep(0.0, 0.08, u.x).mul(smoothstep(1.0, 0.92, u.x)).mul(smoothstep(0.0, 0.08, u.y)).mul(smoothstep(1.0, 0.92, u.y));
+  m.colorNode = col.mul(clamp(shape, 0, 2)).mul(scan).mul(fl).mul(edge).mul(3.0).mul(distFade());
+  _holoMats.set(kind, m);
+  return m;
+}
 export function buildHolos(defs: HoloDef[]) {
   const grp = new THREE.Group();
   for (const d of defs) {
-    const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
-    const u = uv(), c = new THREE.Color(d.color);
-    let shape;
-    if (d.kind === 'koi') {
-      const t = time.mul(0.6);
-      const p = u.sub(0.5).mul(vec2(1.6, 1.0));
-      const body = smoothstep(0.08, 0.0, abs(p.y.sub(sin(p.x.mul(6.0).add(t.mul(3.0))).mul(0.08))).sub(float(0.12).mul(float(1).sub(abs(p.x).mul(1.6)))));
-      shape = body.mul(step(abs(p.x), float(0.62)));
-    } else if (d.kind === 'face') {
-      const p = u.sub(0.5);
-      const head = smoothstep(0.32, 0.3, length(p.mul(vec2(1.3, 1.0))));
-      const eyes = smoothstep(0.05, 0.03, length(vec2(abs(p.x).sub(0.1), p.y.sub(0.05))));
-      shape = head.mul(0.35).add(eyes).add(smoothstep(0.31, 0.3, length(p.mul(vec2(1.3, 1.0)))).sub(smoothstep(0.29, 0.28, length(p.mul(vec2(1.3, 1.0))))).mul(2.0));
-    } else {
-      const bars = step(0.5, fract(u.x.mul(8.0).add(time.mul(0.5)))).mul(step(0.2, u.y)).mul(step(u.y, float(0.8)));
-      shape = bars.mul(0.6).add(step(0.94, fract(u.y.mul(5.0))));
-    }
-    const scan = sin(u.y.mul(220.0).sub(time.mul(8.0))).mul(0.25).add(0.75);
-    const fl = float(1).sub(step(0.9, mx_noise_float(vec3(time.mul(4.0), d.pos[0], 0))).mul(0.5).mul(U.flicker));
-    const edge = smoothstep(0.0, 0.08, u.x).mul(smoothstep(1.0, 0.92, u.x)).mul(smoothstep(0.0, 0.08, u.y)).mul(smoothstep(1.0, 0.92, u.y));
-    m.colorNode = vec3(c.r, c.g, c.b).mul(clamp(shape, 0, 2)).mul(scan).mul(fl).mul(edge).mul(3.0).mul(distFade());
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(d.size[0], d.size[1]), m);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(d.size[0], d.size[1]), holoMat(d.kind));
+    mesh.userData.holoCol = new THREE.Color(d.color); mesh.userData.holoSeed = d.pos[0] * 0.37 + d.pos[2] * 0.11;
     mesh.position.set(...d.pos); mesh.rotation.y = d.yaw; mesh.renderOrder = 6;
     grp.add(mesh);
   }

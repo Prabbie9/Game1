@@ -1,25 +1,27 @@
 // Neon sign atlas: every sign word is drawn once into one canvas (R = tube core, G = glow halo); signs in a
 // chunk merge into one mesh with per-vertex colour + flicker → one draw call and one shader for all signs.
 import * as THREE from 'three/webgpu';
-import { attribute, texture, uv, vec3, float, step, clamp, mx_noise_float, DoubleSide } from './tslShim';
+import { attribute, texture, uv, vec3, float, step, clamp, DoubleSide } from './tslShim';
+import { fract, sin, floor } from 'three/tsl';
 import { U, distFade } from '../materials/materials';
 import type { NeonDef } from './defs';
 import { mergeGeoms } from './build';
 
-const AW = 2048, AH = 2048;
+const AW = 1024, AH = 1024; // half-res slots: a quarter of the upload / mipmap cost of the old 2048² atlas
+const K = 0.5;
 let canvas: HTMLCanvasElement | null = null, tex: THREE.CanvasTexture | null = null;
 const slots = new Map<string, [number, number, number, number]>(); // key → u0 v0 u1 v1
 let nextH = 0, nextV = 0;
 
 function draw(ctx: CanvasRenderingContext2D, x: number, y: number, W: number, H: number, text: string, vertical: boolean) {
   const pass = (blur: number, lw: number) => {
-    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d')!;
-    g.fillStyle = '#000'; g.fillRect(0, 0, W, H); g.strokeStyle = '#fff'; g.lineWidth = lw; g.shadowColor = '#fff'; g.shadowBlur = blur; g.lineJoin = 'round';
-    if (!text) { g.beginPath(); g.moveTo(10, H / 2); g.lineTo(W - 10, H / 2); g.stroke(); return g.getImageData(0, 0, W, H); }
-    g.strokeRect(8, 8, W - 16, H - 16);
-    g.font = `bold ${vertical ? 78 : 86}px "Arial Black", Impact, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    if (vertical) { const ch = text.slice(0, 6).split(''); ch.forEach((cc, i) => g.strokeText(cc, W / 2, 62 + i * ((H - 104) / Math.max(1, ch.length - 1)))); }
-    else g.strokeText(text, W / 2, H / 2 + 4, W - 40);
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true })!;
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H); g.strokeStyle = '#fff'; g.lineWidth = lw * K; g.shadowColor = '#fff'; g.shadowBlur = blur * K; g.lineJoin = 'round';
+    if (!text) { g.beginPath(); g.moveTo(10 * K, H / 2); g.lineTo(W - 10 * K, H / 2); g.stroke(); return g.getImageData(0, 0, W, H); }
+    g.strokeRect(8 * K, 8 * K, W - 16 * K, H - 16 * K);
+    g.font = `bold ${(vertical ? 78 : 86) * K}px "Arial Black", Impact, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    if (vertical) { const ch = text.slice(0, 6).split(''); ch.forEach((cc, i) => g.strokeText(cc, W / 2, 62 * K + i * ((H - 104 * K) / Math.max(1, ch.length - 1)))); }
+    else g.strokeText(text, W / 2, H / 2 + 4 * K, W - 40 * K);
     return g.getImageData(0, 0, W, H);
   };
   const a = pass(0, 4), b = pass(22, 10);
@@ -30,25 +32,34 @@ function draw(ctx: CanvasRenderingContext2D, x: number, y: number, W: number, H:
 function slot(text: string, vertical: boolean): [number, number, number, number] {
   const key = (vertical ? 'v:' : 'h:') + text;
   const hit = slots.get(key); if (hit) return hit;
-  if (!canvas) { canvas = document.createElement('canvas'); canvas.width = AW; canvas.height = AH; const c = canvas.getContext('2d')!; c.fillStyle = '#000'; c.fillRect(0, 0, AW, AH); }
-  const ctx = canvas.getContext('2d')!;
+  if (!canvas) { canvas = document.createElement('canvas'); canvas.width = AW; canvas.height = AH; const c = canvas.getContext('2d', { willReadFrequently: true })!; c.fillStyle = '#000'; c.fillRect(0, 0, AW, AH); }
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   let r: [number, number, number, number];
-  if (!vertical && nextH < 32) { const i = nextH++, x = (i % 4) * 512, y = Math.floor(i / 4) * 128; draw(ctx, x, y, 512, 128, text, false); r = [x / AW, 1 - (y + 128) / AH, (x + 512) / AW, 1 - y / AH]; }
-  else if (vertical && nextV < 32) { const i = nextV++, x = (i % 16) * 128, y = 1024 + Math.floor(i / 16) * 512; draw(ctx, x, y, 128, 512, text, true); r = [x / AW, 1 - (y + 512) / AH, (x + 128) / AW, 1 - y / AH]; }
+  if (!vertical && nextH < 32) { const i = nextH++, x = (i % 4) * 256, y = Math.floor(i / 4) * 64; draw(ctx, x, y, 256, 64, text, false); r = [x / AW, 1 - (y + 64) / AH, (x + 256) / AW, 1 - y / AH]; }
+  else if (vertical && nextV < 32) { const i = nextV++, x = (i % 16) * 64, y = 512 + Math.floor(i / 16) * 256; draw(ctx, x, y, 64, 256, text, true); r = [x / AW, 1 - (y + 256) / AH, (x + 64) / AW, 1 - y / AH]; }
   else r = slots.values().next().value!; // atlas full: reuse the first sign (never happens with the authored word list)
   slots.set(key, r);
   if (tex) tex.needsUpdate = true;
   return r;
 }
 
+/** Draw every sign word into the atlas before chunks are built, yielding between words (each word is two
+ *  blurred canvas passes, slow on software rasterisers): keeps the load from freezing in one long task. */
+export async function warmNeonAtlas(neons: NeonDef[], yieldFn: () => Promise<void>, trace: (s: string) => void = () => {}) {
+  let t0 = performance.now();
+  for (const n of neons) { const t1 = performance.now(); slot(n.text, !!n.vertical); if (performance.now() - t1 > 300) trace(`neon slot '${n.text}' ${Math.round(performance.now() - t1)} ms`); if (performance.now() - t0 > 100) { await yieldFn(); t0 = performance.now(); } }
+}
+
 let material: THREE.Material | null = null;
 function neonMaterial() {
   if (material) return material;
   tex = new THREE.CanvasTexture(canvas!); tex.colorSpace = THREE.NoColorSpace; tex.anisotropy = 4;
-  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide, fog: false, blending: THREE.AdditiveBlending });
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, forceSinglePass: true, depthWrite: false, side: DoubleSide, fog: false, blending: THREE.AdditiveBlending });
   const s = texture(tex, uv());
   const col = attribute('ncol', 'vec3'), fl = attribute('nflick', 'float');
-  const flick = float(1).sub(step(0.82, mx_noise_float(vec3(U.time.mul(9.0), fl.mul(37.0), 0))).mul(step(0.01, fl)).mul(U.flicker).mul(0.85));
+  // flicker: cheap hash per sign and 1/9 s step (MaterialX noise made this shader slow to build on software GL)
+  const rnd = fract(sin(floor(U.time.mul(9.0)).mul(0.731).add(fl.mul(37.0)).mul(12.9898)).mul(43758.5453));
+  const flick = float(1).sub(step(0.82, rnd).mul(step(0.01, fl)).mul(U.flicker).mul(0.85));
   m.colorNode = col.mul(s.r.mul(7.0).add(s.g.mul(0.9))).mul(flick).mul(U.neonGain).mul(distFade());
   m.opacityNode = clamp(s.r.add(s.g), 0, 1);
   material = m;

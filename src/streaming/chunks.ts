@@ -13,10 +13,12 @@ import * as M from '../materials/materials';
 interface Chunk {
   key: string; cx: number; cz: number;
   boxes: BoxDef[]; neons: NeonDef[]; props: PropDef[]; cables: CableDef[]; steam: SteamDef[]; lights: LightDef[];
-  state: 0 | 1 | 2; group: THREE.Group | null; phys: boolean;
+  state: 0 | 1 | 2; group: THREE.Group | null; phys: boolean; detail: THREE.Object3D | null;
 }
 
-export interface StreamOpts { size: number; nearR: number; farR: number; physIn: number; physOut: number }
+export interface StreamOpts { size: number; nearR: number; farR: number; physIn: number; physOut: number; detailR?: number }
+// street furniture, decals and roof clutter: drawn only within StreamOpts.detailR (tiered)
+const DETAIL = new Set(['vending', 'bin', 'bench', 'bollard', 'barrier', 'stall', 'tramstop', 'drain', 'tank', 'antenna', 'dish', 'signrig', 'fireesc', 'decal', 'crate']);
 
 export class ChunkStreamer {
   chunks = new Map<string, Chunk>();
@@ -33,7 +35,7 @@ export class ChunkStreamer {
     const get = (x: number, z: number) => {
       const k = key(x, z);
       let c = this.chunks.get(k);
-      if (!c) { const [i, j] = k.split(',').map(Number); c = { key: k, cx: (i + 0.5) * o.size, cz: (j + 0.5) * o.size, boxes: [], neons: [], props: [], cables: [], steam: [], lights: [], state: 0, group: null, phys: false }; this.chunks.set(k, c); }
+      if (!c) { const [i, j] = k.split(',').map(Number); c = { key: k, cx: (i + 0.5) * o.size, cz: (j + 0.5) * o.size, boxes: [], neons: [], props: [], cables: [], steam: [], lights: [], state: 0, group: null, phys: false, detail: null }; this.chunks.set(k, c); }
       return c;
     };
     for (const b of world.boxes) {
@@ -84,7 +86,9 @@ export class ChunkStreamer {
     const g = this.boxMeshes(c.boxes, state === 1);
     if (c.neons.length) g.add(buildNeonMesh(c.neons, this.backMat));
     if (state === 2) {
-      if (c.props.length) g.add(buildProps(c.props));
+      const core = c.props.filter((p) => !DETAIL.has(p.kind)), det = c.props.filter((p) => DETAIL.has(p.kind));
+      if (core.length) g.add(buildProps(core));
+      if (det.length) { c.detail = buildProps(det); g.add(c.detail); }
       if (c.cables.length) g.add(buildCables(c.cables));
       if (c.steam.length) g.add(buildSteam(c.steam));
       const cones = c.lights.filter((l) => l.cone);
@@ -98,7 +102,7 @@ export class ChunkStreamer {
     if (c.group) {
       this.scene.remove(c.group);
       c.group.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.geometry.dispose(); });
-      c.group = null;
+      c.group = null; c.detail = null;
     }
     if (resetState) c.state = 0;
   }
@@ -111,6 +115,7 @@ export class ChunkStreamer {
       const want: 0 | 1 | 2 = d < this.o.nearR ? 2 : d < this.o.farR ? 1 : 0;
       // hysteresis: keep NEAR until 20 m past the radius, keep FAR until 30 m past
       const keep = (c.state === 2 && d < this.o.nearR + 20) ? 2 : (c.state >= 1 && want === 0 && d < this.o.farR + 30) ? 1 : want;
+      if (c.detail) c.detail.visible = d < (this.o.detailR ?? 1e9);
       if (keep === 0 && c.state !== 0) this.drop(c);
       else if (keep !== c.state && keep !== 0 && (!best || d < best.d)) best = { c, s: keep as 1 | 2, d };
       // physics around the bike
@@ -127,6 +132,18 @@ export class ChunkStreamer {
     }
     if (best) { this.build(best.c, best.s); return true; }
     return false;
+  }
+
+  /** Initial load without freezing the page: physics bookkeeping as update(), then build every wanted chunk
+   *  nearest-first, yielding to the browser whenever ~120 ms of work has piled up. */
+  async buildInitial(cam: THREE.Vector3, bike: THREE.Vector3, yieldFn: () => Promise<void>, onProgress?: (done: number, total: number) => void) {
+    for (const c of this.chunks.values()) if (this.physics && !c.phys && Math.hypot(c.cx - bike.x, c.cz - bike.z) < this.o.physIn) { this.physics.addChunk(c.key, c.boxes); c.phys = true; }
+    const list = [...this.chunks.values()].map((c) => ({ c, d: Math.hypot(c.cx - cam.x, c.cz - cam.z) })).filter((e) => e.d < this.o.farR).sort((a, b) => a.d - b.d);
+    let t0 = performance.now(), i = 0;
+    for (const e of list) {
+      this.build(e.c, e.d < this.o.nearR ? 2 : 1);
+      if (performance.now() - t0 > 120) { onProgress?.(++i, list.length); await yieldFn(); t0 = performance.now(); } else i++;
+    }
   }
 
   stats() {

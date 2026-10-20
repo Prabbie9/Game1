@@ -4,7 +4,7 @@
 import { BoxDef, LightDef, NeonDef, WorldDef } from './defs';
 import { ramp, rng } from './testarea';
 import type { CableDef, HoloDef, PropDef, SteamDef } from './kit';
-import { furnishFace } from './furniture';
+import { furnishFace, posters, streetDecals } from './furniture';
 
 export interface Dressing { props: PropDef[]; cables: CableDef[]; steam: SteamDef[]; holos: HoloDef[] }
 export type SliceWorld = WorldDef & { dressing: Dressing };
@@ -126,7 +126,7 @@ export function buildSlice(opts: { embed?: boolean } = {}): SliceWorld {
         if (R() < 0.5 && !isHoshi) neons.push({ pos: [fx - rx * side * 0.25, 4.6 + R() * 1.5, fz - rz * side * 0.25], size: [Math.min(w - 2, 6), 1.2], yaw: fyaw, color: palette[Math.floor(R() * palette.length)], text: words[Math.floor(R() * words.length)], light: 0 });
         // street furniture, drainpipes and fire escapes (own RNG: the authored layout above is unchanged)
         if (!isHoshi) {
-          furnishFace(props, boxes, RF, fx, fz, fyaw, w, null);
+          furnishFace(props, boxes, RF, fx, fz, fyaw, w, null); posters(props, RF, fx, fz, fyaw, w);
           if (RF() < 0.5) { const al = (RF() - 0.5) * (w - 1.5); props.push({ kind: 'drain', pos: [fx + Math.cos(fyaw) * al, 0, fz - Math.sin(fyaw) * al], yaw: fyaw, size: [0, Math.min(h, 40), 0] }); }
           if (h > 12 && w > 9 && RF() < 0.35) { const al = (RF() - 0.5) * (w - 5); props.push({ kind: 'fireesc', pos: [fx + Math.cos(fyaw) * al, 0, fz - Math.sin(fyaw) * al], yaw: fyaw, size: [3, Math.min(h - 2, 27), 1.1] }); }
         }
@@ -204,6 +204,8 @@ export function buildSlice(opts: { embed?: boolean } = {}): SliceWorld {
       neons.push({ pos: [xx + side * 0.3, SKY.y + 0.6, z], size: [3, 0.25], yaw: side * Math.PI / 2, color: side < 0 ? '#ff2aa8' : '#19e6ff', text: '', light: 0 });
     }
   }
+  // centre-line dashes + wear along the authored street (segment by segment along its path)
+  for (let k = 0; k + 5 < path.length; k += 5) streetDecals(props, RF, path[k].x, path[k].z, path[k + 5].x, path[k + 5].z, ROAD_HW, () => false);
   // Skyway detail (render only): box girders under both deck edges with a glowing underside strip, pillar caps,
   // and sign gantries arching over the deck
   for (const side of [-1, 1]) {

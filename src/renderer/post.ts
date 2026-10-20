@@ -123,9 +123,27 @@ export class Post {
   async compile(renderer: THREE.WebGPURenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, onProgress?: (done: number, total: number) => void) {
     const prevRT = renderer.getRenderTarget(), prevMRT = renderer.getMRT();
     renderer.setRenderTarget(this.scenePass.renderTarget); renderer.setMRT(this.scenePass.getMRT());
-    try { await renderer.compileAsync(scene, camera, null, onProgress as any); }
-    finally { renderer.setRenderTarget(prevRT); renderer.setMRT(prevMRT); }
+    // compileAsync frustum-culls: lift culling for the compile so off-screen objects (and the chunks behind the
+    // camera) get their programs now instead of stalling the first frames that see them
+    const culled: THREE.Object3D[] = [];
+    scene.traverse((o) => { if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+    // the scene pass draws nested inside the pipeline's render (render-context call depth `sceneDepth`, measured by
+    // probe()), but compileAsync keys its context at depth 0. Instanced/skinned shaders embed buffer-node ids, so a
+    // context mismatch rebuilds them with new code that links synchronously on first draw (seconds on weak GPUs).
+    // (three r186 private API: RenderContexts.get(renderTarget, mrt, callDepth))
+    const rc = (renderer as any)._renderContexts, get0 = rc?.get, D = this.sceneDepth;
+    if (get0) rc.get = (rt: any, mrt: any, depth = 0) => get0.call(rc, rt, mrt, depth === 0 ? D : depth);
+    try { await renderer.compileAsync(scene, camera, null, onProgress ? ((e: ProgressEvent) => onProgress(e.loaded, e.total)) as any : null); }
+    finally { if (get0) rc.get = get0; renderer.setRenderTarget(prevRT); renderer.setMRT(prevMRT); for (const o of culled) o.frustumCulled = true; }
   }
   render() { this.pipeline.render(); }
+  /** Render-context call depth at which the scene pass draws (see compile). */
+  sceneDepth = 1;
+  /** One pipeline render that records the scene pass's call depth (do it with the scene's meshes hidden). */
+  probe(renderer: THREE.WebGPURenderer) {
+    const rc = (renderer as any)._renderContexts, get0 = rc?.get, target = this.scenePass.renderTarget;
+    if (get0) rc.get = (rt: any, mrt: any, depth = 0) => { if (rt === target) this.sceneDepth = depth; return get0.call(rc, rt, mrt, depth); };
+    try { this.pipeline.render(); } finally { if (get0) rc.get = get0; }
+  }
 }
 export const _p = { vec3, uv };

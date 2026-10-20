@@ -24,6 +24,7 @@ import { Bot } from './bot/bot';
 import { Occlusion } from './heat/occlusion';
 import { buildCraft } from './heat/craft';
 import { propWarmGroup } from './world/kit';
+import { warmNeonAtlas } from './world/neonAtlas';
 import { loadOverrides } from './assets/overrides';
 import { HeatSystem, Pursuer } from './heat/heat';
 import { NavUI } from './ui/nav';
@@ -35,6 +36,7 @@ import { Person } from './vehicle/person';
 import { loadHumans } from './characters/humans';
 import { Cast } from './characters/cast';
 import { HumanCrowd } from './characters/crowd';
+import { CHAR } from './characters/humans';
 import { BAR } from './world/noodlebar';
 import type { WorldDef } from './world/defs';
 
@@ -75,6 +77,7 @@ async function boot() {
   catch (e) { console.warn('WebGPU init failed, using WebGL2', e); document.querySelector('canvas')?.remove(); made = await createRenderer(document.body, true); }
   const { renderer, backend } = made;
   load.status('BUILDING THE DISTRICT'); await tick();
+  CHAR.lite = q.tier === 'low';
   const humansP = loadHumans().catch((e) => { console.warn('character data failed to load, using fallback figures', e); return null; });
   const W = params.get('w') ? +params.get('w')! : innerWidth, H = params.get('h') ? +params.get('h')! : innerHeight;
   renderer.setSize(W, H, !params.get('w'));
@@ -87,13 +90,23 @@ async function boot() {
   const world: WorldDef = worldName === 'test' ? buildTestArea() : worldName === 'slice' ? buildSlice() : buildStacks();
   (window as any).__NC_WORLD = worldName;
   await tick();
+  const TR = params.has('trace') ? (l: string) => console.log('[trace]', l, Math.round(performance.now())) : () => {};
+  TR('atmo<');
   const atmo = new Atmosphere(scene, renderer, q.shadows);
+  TR('atmo>');
   const tuning: Tuning = cloneTuning(PRESETS[settings.preset] ?? BALANCED);
   const physics = new PhysicsClient();
   physics.onError = (m) => console.error(m);
   const streamer = new ChunkStreamer(scene, world as SliceWorld, makeMaterials(), physics);
+  streamer.o.detailR = q.detailR;
+  TR('streamer>');
+  await tick();
   await physics.init(streamer.initialPhysics(world.spawn.pos[0], world.spawn.pos[2]), world.spawn.pos, world.spawn.yaw, tuning);
-  streamer.update(new THREE.Vector3(...world.spawn.pos), new THREE.Vector3(...world.spawn.pos), true);
+  TR('physics>');
+  const spawnV = new THREE.Vector3(...world.spawn.pos);
+  await warmNeonAtlas(world.neons, tick, TR);
+  TR('neon>');
+  await streamer.buildInitial(spawnV, spawnV, tick, (d, n) => load.status(`BUILDING THE DISTRICT ${Math.round(100 * d / n)}%`));
   load.status('POPULATING THE STREETS'); await tick();
   const dressing = (world as SliceWorld).dressing;
   if (dressing) scene.add(buildHolos(dressing.holos));
@@ -102,10 +115,11 @@ async function boot() {
   let crowd: HumanCrowd | null = null;
   if (SW.walk) {
     const hum = await humansP;
-    const dens = q.tier === 'low' ? 0.03 : q.tier === 'medium' ? 0.05 : 0.07;
+    const C = q.crowd, dens = C.density;
     if (hum) {
-      crowd = new HumanCrowd(hum, SW.walk, dens, q.tier === 'low' ? 3 : q.tier === 'medium' ? 6 : 10, q.tier === 'low' ? 10 : 15);
-      if (q.tier === 'low') { crowd.midR = 60; crowd.nearR = 15; crowd.farR = 220; }
+      crowd = new HumanCrowd(hum, SW.walk, dens, C.pool, C.vatFps, 7, C.npcLod);
+      crowd.nearR = C.nearR; crowd.midR = C.midR; crowd.farR = C.farR;
+      crowd.vat = C.midR > C.nearR;
       load.status('DRESSING THE CROWDS'); await tick();
       await crowd.bake(tick);
       scene.add(crowd.group);
@@ -164,7 +178,7 @@ async function boot() {
   let onFoot = false; let inside = false; let fade = 0;
   const parked = { x: 0, y: 0, z: 0, yaw: 0 };
   // skinned cast (fallback: the old box figures if the character data could not load)
-  const cast = humans ? new Cast(scene, humans, bike.body) : null;
+  const cast = humans ? new Cast(scene, humans, bike.body, q.crowd.npcLod) : null;
   if (cast) { const [gl, gr] = cast.grips(bike.body); bike.hull.setGrips(gl, gr); }
   const courier = cast ? null : new Person(scene); if (courier) courier.root.visible = false;
   if (!cast && worldName === 'stacks') new Person(scene, 0x3a2418, 0xffa142).update(BAR.kiso[0], BAR.kiso[1] + 0.9, BAR.kiso[2], Math.PI, 0, true, 0);
@@ -349,15 +363,45 @@ async function boot() {
 
   // compile shaders in parallel in the background (progress shown), then warm the first frame behind the loading screen
   load.status('COMPILING SHADERS'); await tick();
+  // set the post chain up first (PassNode.setup fixes the scene target's sample count / MRT on its first render):
+  // compiling before that builds programs for a different render context, which then link synchronously on first draw
+  {
+    const shown: THREE.Object3D[] = [];
+    scene.traverseVisible((o: any) => { if (o.isMesh || o.isPoints || o.isLine) shown.push(o); });
+    for (const o of shown) o.visible = false;
+    post.probe(renderer); await tick();
+    for (const o of shown) o.visible = true;
+  }
   // pursuit craft spawn mid-chase: compile their shared materials now (parked in front of the camera during compile only)
   const craftWarm = new THREE.Group(); for (const k of ['drone', 'patrol', 'hound', 'sweeper'] as const) craftWarm.add(buildCraft(k));
   craftWarm.add(propWarmGroup());
+  crowd?.update(0, 0, camera); // instance counts start at 0, and compileAsync skips empty instanced meshes
   craftWarm.position.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(6)); scene.add(craftWarm);
   try { await post.compile(renderer, scene, camera, (d, n) => load.status(`COMPILING SHADERS ${d}/${n}`)); } catch (e) { console.warn('shader precompile failed', e); }
   scene.remove(craftWarm);
   load.status('WARMING UP'); await tick();
+  // progressive warm-up: the first draw of each material builds its GPU pipeline (seconds each on software GL), so
+  // reveal meshes a few materials at a time, one frame and one yield per batch; the batch grows while frames stay
+  // cheap. Lights are never toggled (a different light set would recompile every material).
+  {
+    const byMat = new Map<THREE.Material, THREE.Object3D[]>();
+    scene.traverseVisible((o: any) => { if ((o.isMesh || o.isPoints || o.isLine) && o.material) { const k = Array.isArray(o.material) ? o.material[0] : o.material; (byMat.get(k) ?? byMat.set(k, []).get(k)!).push(o); } });
+    const groups = [...byMat.values()];
+    for (const g of groups) for (const o of g) o.visible = false;
+    post.render(); await tick();
+    let i = 0, batch = 1;
+    while (i < groups.length) {
+      for (const g of groups.slice(i, i + batch)) for (const o of g) o.visible = true;
+      i += batch;
+      load.status(`WARMING UP ${Math.round(100 * Math.min(1, i / groups.length))}%`);
+      const tw = performance.now(); post.render(); const dt = performance.now() - tw;
+      TR(`warm batch ${batch}: ${Math.round(dt)} ms`);
+      batch = dt < 120 ? Math.min(12, batch * 2) : dt > 350 ? Math.max(1, batch >> 1) : batch;
+      await tick();
+    }
+  }
   const T1 = performance.now(); post.render(); await tick(); post.render(); await tick();
-  const warmMs = performance.now() - T1;
+  const warmMs = performance.now() - T1; TR('two full frames ms ' + Math.round(warmMs));
   // a machine that needs seconds for two frames cannot run this tier: fall back to Low once and reload (guarded against loops)
   let slowNote = '';
   if (warmMs > 6000 && settings.tier !== 'low' && !params.has('quality')) {

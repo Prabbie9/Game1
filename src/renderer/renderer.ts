@@ -9,14 +9,21 @@ import type { PostQuality } from './post';
 export type Tier = 'low' | 'medium' | 'high';
 export interface Quality {
   tier: Tier; renderScale: number; rain: number; lightPool: number; shadows: number; cones: boolean; post: PostQuality;
+  /** humans: crowd density (people per metre of walkway), pooled skinned heroes, VAT bake fps, LOD radii, NPC hero LOD */
+  crowd: { density: number; pool: number; vatFps: number; nearR: number; midR: number; farR: number; npcLod: 0 | 1 };
+  /** street furniture, decals and roof clutter are drawn only for chunks within this radius (m) */
+  detailR: number;
 }
 export const TIERS: Record<Tier, Quality> = {
   low: { tier: 'low', renderScale: 0.6, rain: 2500, lightPool: 4, shadows: 0, cones: true,
-    post: { ssr: false, ao: false, traa: false, dof: false, motionBlur: false, anamorphic: false, lensDrops: true, ca: false } },
+    post: { ssr: false, ao: false, traa: false, dof: false, motionBlur: false, anamorphic: false, lensDrops: true, ca: false },
+    crowd: { density: 0.03, pool: 5, vatFps: 6, nearR: 20, midR: 20, farR: 220, npcLod: 1 }, detailR: 90 }, // Low: no VAT band (pooled heroes → silhouettes)
   medium: { tier: 'medium', renderScale: 0.8, rain: 5000, lightPool: 8, shadows: 1024, cones: true,
-    post: { ssr: true, ao: false, traa: true, dof: false, motionBlur: true, anamorphic: true, lensDrops: true, ca: true } },
+    post: { ssr: true, ao: false, traa: true, dof: false, motionBlur: true, anamorphic: true, lensDrops: true, ca: true },
+    crowd: { density: 0.05, pool: 6, vatFps: 15, nearR: 22, midR: 70, farR: 260, npcLod: 0 }, detailR: 130 },
   high: { tier: 'high', renderScale: 1.0, rain: 9000, lightPool: 12, shadows: 2048, cones: true,
-    post: { ssr: true, ao: true, traa: true, dof: true, motionBlur: true, anamorphic: true, lensDrops: true, ca: true } },
+    post: { ssr: true, ao: true, traa: true, dof: true, motionBlur: true, anamorphic: true, lensDrops: true, ca: true },
+    crowd: { density: 0.07, pool: 10, vatFps: 15, nearR: 25, midR: 80, farR: 300, npcLod: 0 }, detailR: 170 },
 };
 
 export async function createRenderer(container: HTMLElement, forceWebGL: boolean) {

@@ -94,7 +94,11 @@ export const OUTFITS: Record<string, Outfit> = {
 };
 
 /** Shared character shader. `inst` = per-instance palette (crowds); otherwise per-material uniforms (heroes). */
+/** Low tier: a lighter character shader (no face details, fabric patterns, rain sparkles, rim or per-layer
+ *  roughness) — about half the shader, which matters most on software / weak GPUs. Set before any material is built. */
+export const CHAR = { lite: false };
 export function characterMaterial(o: { mask: any; colors: any; accent: any; skin: any; positionNode?: any; normalNode?: any }) {
+  if (CHAR.lite) return characterMaterialLite(o);
   const m = new THREE.MeshStandardNodeMaterial();
   const layer = attribute('layer', 'float');
   const rest = attribute('rest', 'vec3');
@@ -132,17 +136,52 @@ export function characterMaterial(o: { mask: any; colors: any; accent: any; skin
   const zip = smoothstep(0.006, 0.002, abs(rest.x)).mul(step(0.02, rest.z)).mul(isCoat.add(isJacket));
   const hem = smoothstep(0.012, 0.0, abs(rest.y.sub(0.515))).mul(isCoat).add(smoothstep(0.01, 0.0, abs(rest.y.sub(0.9))).mul(isJacket));
   const ndv = abs(dot(normalize(positionView).negate(), normalView));
-  const rim = pow(float(1).sub(ndv), 3.0).mul(0.1).mul(isCloth);
-  m.emissiveNode = o.accent.mul(isVisor.mul(3.0).add(zip.add(hem).clamp(0, 1).mul(1.6)).add(rim));
+  const rim = pow(float(1).sub(ndv), 3.0).mul(0.06).mul(isCloth);
+  // rain: tiny impact sparkles flicking over heads and shoulders (cells in rest space, re-rolled 7× a second)
+  const cell = floor(rest.mul(28.0)), tick = floor(U.time.mul(7.0));
+  const rnd = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719)).add(tick.mul(17.13))).mul(43758.5453));
+  const top = smoothstep(1.3, 1.5, rest.y).mul(step(0.0, rest.y.sub(1.3)));
+  const splash = step(0.975, rnd).mul(top).mul(U.rain).mul(isCloth.add(isSkin).clamp(0, 1));
+  m.emissiveNode = o.accent.mul(isVisor.mul(3.0).add(zip.add(hem).clamp(0, 1).mul(1.6)).add(rim)).add(vec3(0.6, 0.7, 0.8).mul(splash))
+    .add(col.mul(0.05)); // faint albedo fill: people stay readable in the darkest alleys
+  return m;
+}
+
+function characterMaterialLite(o: { mask: any; colors: any; accent: any; skin: any; positionNode?: any; normalNode?: any }) {
+  const m = new THREE.MeshStandardNodeMaterial();
+  const layer = attribute('layer', 'float'), li = int(layer.add(0.5));
+  const visible = mod(floor(o.mask.div(pow(float(2), layer.add(0.01).floor()))), 2);
+  m.positionNode = (o.positionNode ?? positionLocal).mul(visible);
+  if (o.normalNode) m.normalNode = o.normalNode;
+  const isSkin = step(abs(layer.sub(LAYER.SKIN)), float(0.5)), isVisor = step(abs(layer.sub(LAYER.VISOR)), float(0.5));
+  const col = mix(o.colors.element(li), o.skin, isSkin);
+  m.colorNode = col.mul(mix(float(1), float(0.75), U.wet.mul(float(1).sub(isSkin))));
+  m.roughnessNode = float(0.5); m.metalnessNode = float(0.0);
+  m.emissiveNode = o.accent.mul(isVisor.mul(3.0)).add(col.mul(0.05));
   return m;
 }
 
 const P = (n: number) => new THREE.Color(n);
 /** Per-character uniforms for the shared shader. */
-export function heroUniforms(of: Outfit) {
+/** Per-hero look (plain values, read per object by the shared hero material). */
+export interface HeroLook { mask: number; colors: THREE.Color[]; accent: THREE.Color; skin: THREE.Color }
+export function heroLook(of: Outfit): HeroLook {
   const cols = Array.from({ length: NL }, (_, i) => P(of.colors[i] ?? 0x1a1b22));
   cols[LAYER.VISOR] = P(0x000000);
-  return { mask: uniform(bit(of.layers)), colors: uniformArray(cols, 'color'), accent: uniform(P(of.accent)), skin: uniform(P(of.skin ?? 0xb48466)) };
+  return { mask: bit(of.layers), colors: cols, accent: P(of.accent), skin: P(of.skin ?? 0xb48466) };
+}
+/** ONE material for every skinned hero (courier, cast, pooled crowd heroes): the look comes from per-object
+ *  uniforms (mesh.userData.hu), so all heroes share one GPU program instead of compiling one each. */
+let _heroMat: THREE.Material | null = null;
+export function heroMaterial() {
+  if (_heroMat) return _heroMat;
+  const hu = (f: any) => (f.object?.userData?.hu as HeroLook | undefined);
+  const mask = uniform(0).onObjectUpdate((f: any) => hu(f)?.mask ?? 0);
+  const cs = Array.from({ length: NL }, (_, i) => uniform(new THREE.Color()).onObjectUpdate((f: any) => hu(f)?.colors[i]));
+  const colors = { element: (li: any) => { let c: any = cs[NL - 1]; for (let i = NL - 2; i >= 0; i--) c = select(li.equal(i), cs[i], c); return c; } };
+  const accent = uniform(new THREE.Color()).onObjectUpdate((f: any) => hu(f)?.accent);
+  const skin = uniform(new THREE.Color()).onObjectUpdate((f: any) => hu(f)?.skin);
+  return (_heroMat = characterMaterial({ mask, colors, accent, skin }));
 }
 
 /** A skinned, animated character with cross-faded clips. */
@@ -156,12 +195,12 @@ export class Hero {
   constructor(public data: HumanData, outfit: Outfit, scene?: THREE.Object3D, lod: 0 | 1 = 0) {
     this.bones = makeBones(data);
     const skel = new THREE.Skeleton(this.bones, data.inverses.map((m) => m.clone()));
-    const u = heroUniforms(outfit);
-    const mat = characterMaterial(u); (mat as any).__u = u;
-    this.mesh = new THREE.SkinnedMesh(lod ? data.lod1 : data.lod0, mat);
+    this.mesh = new THREE.SkinnedMesh(lod ? data.lod1 : data.lod0, heroMaterial());
+    this.mesh.userData.hu = heroLook(outfit);
     this.mesh.add(this.bones[0]);
     this.mesh.bind(skel, new THREE.Matrix4());
-    this.mesh.castShadow = true; this.mesh.frustumCulled = false;
+    // culling: a generous fixed sphere around the root (skinned bounds are costly to recompute every frame)
+    this.mesh.castShadow = true; (this.mesh as any).boundingSphere = new THREE.Sphere(new THREE.Vector3(), 2.6);
     this.root.add(this.mesh);
     this.mixer = new THREE.AnimationMixer(this.mesh);
     scene?.add(this.root);

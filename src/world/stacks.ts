@@ -8,7 +8,7 @@ import type { WalkSeg } from '../crowds/crowds';
 import type { Lane } from './traffic';
 import { addOldMarket } from './oldmarket';
 import { addNoodleBar } from './noodlebar';
-import { furnishFace, roofClutter, solidProp } from './furniture';
+import { furnishFace, roofClutter, solidProp, streetDecals, zebra, posters } from './furniture';
 
 export type StacksWorld = SliceWorld & { walk: WalkSeg[]; lanes: Lane[]; tram: { a: [number, number, number]; b: [number, number, number] } };
 
@@ -128,7 +128,7 @@ export function buildStacks(): StacksWorld {
           for (let q = 0; q < 3; q++) { const y = 5 + R() * Math.max(2, h - 8); if (y < h - 1) props.push({ kind: R() < 0.7 ? 'ac' : 'balcony', pos: [cx + tx * (R() - 0.5) * (fw - 2), y, cz + tz * (R() - 0.5) * (fw - 2)], yaw, size: [0.9, 0.6, 0.5] }); }
           if (R() < 0.12) steam.push({ pos: [cx + nx * 2.2, 0.2, cz + nz * 2.2], radius: 0.6, height: 4, tint: '#8a7aa8' });
           // street furniture against this street-facing wall (the kerb side and the road stay clear)
-          if (wide) furnishFace(props, boxes, RF, cx, cz, yaw, fw, [fx0, fz0, fx1, fz1]);
+          if (wide) { furnishFace(props, boxes, RF, cx, cz, yaw, fw, [fx0, fz0, fx1, fz1]); posters(props, RF, cx, cz, yaw, fw); }
           // facade depth: drainpipes and zig-zag fire escapes (above head height, render only)
           if (RF() < 0.55) { const al = (RF() - 0.5) * (fw - 1.5); props.push({ kind: 'drain', pos: [cx + tx * al + nx * 0.02, 0, cz + tz * al + nz * 0.02], yaw, size: [0, Math.min(h, 40), 0] }); }
           if (h > 12 && fw > 9 && RF() < 0.4) { const al = (RF() - 0.5) * (fw - 5); props.push({ kind: 'fireesc', pos: [cx + tx * al, 0, cz + tz * al], yaw, size: [3, Math.min(h - 2, 27), 1.1] }); }
@@ -149,6 +149,17 @@ export function buildStacks(): StacksWorld {
     }
     // cables across the street in front of the block's north edge
     if (R() < 0.6) cables.push({ a: [fx0 + 5, 9 + R() * 4, fz0 - 0.5], b: [fx0 + 5 + (R() - 0.5) * 6, 9 + R() * 4, fz0 - 19.5], sag: 1.2, laundry: R() < 0.25 });
+  }
+
+  // road markings, wear and zebra crossings on the street grid (outside the hand-authored slice)
+  const junction = (x: number, z: number) => H.some(([hz, a, b]) => Math.abs(z - hz) < CORR + 1 && x > a - CORR && x < b + CORR) && V.some(([vx, a, b]) => Math.abs(x - vx) < CORR + 1 && z > a - CORR && z < b + CORR);
+  const inSlice = (x: number, z: number) => x > SR.x0 && x < SR.x1 && z > SR.z0 && z < SR.z1;
+  const skipD = (x: number, z: number) => junction(x, z) || inSlice(x, z) || (x > CANAL_E.x0 - 2);
+  for (const [x, a, b] of V) streetDecals(props, RF, x, a, x, b, 7, skipD);
+  for (const [z, a, b] of H) streetDecals(props, RF, a, z, b, z, 7, skipD);
+  for (const [vx, va, vb] of V) for (const [hz, ha, hb] of H) {
+    if (hz < va || hz > vb || vx < ha || vx > hb || inSlice(vx, hz)) continue;
+    for (const s of [-1, 1]) { zebra(props, RF, vx + s * (CORR + 1.6), hz, Math.PI / 2, 7); zebra(props, RF, vx, hz + s * (CORR + 1.6), 0, 7); }
   }
 
   // tram stops under the line (between portal frames, on the south sidewalk), facing the street

@@ -19,7 +19,7 @@ import type { WorldDef } from '../world/defs';
 
 function beam(color: string, radius: number, height: number, strength: number) {
   const g = new THREE.CylinderGeometry(radius, radius, height, 20, 1, true); g.translate(0, height / 2, 0);
-  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, forceSinglePass: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
   const c = new THREE.Color(color), v = uv().y;
   const pulse = sin(time.mul(3.0).sub(v.mul(40.0))).mul(0.25).add(0.75);
   m.colorNode = vec3(c.r, c.g, c.b).mul(float(1).sub(v).pow(1.5).mul(pulse).mul(strength)).mul(distFade().mul(0.7).add(0.3));

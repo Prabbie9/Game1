@@ -33,7 +33,7 @@ export class Pursuer {
     const len = S.range, r = Math.tan(S.cone) * len;
     const g = new THREE.ConeGeometry(r, len, 24, 1, true); g.translate(0, -len / 2, 0);
     const uvA = g.attributes.uv; for (let i = 0; i < uvA.count; i++) uvA.setY(i, 1 - uvA.getY(i));
-    const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false });
+    const m = new THREE.MeshBasicNodeMaterial({ transparent: true, forceSinglePass: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, fog: false });
     this.coneCol = uniform(new THREE.Color(S.color));
     const v = uv().y;
     const fres = abs(dot(normalize(positionView).negate(), normalView));

@@ -25,7 +25,7 @@ export class BikeModel {
     this.hull = buildHull(this.body);
     const ov = override('vehicles/bike'); // drop-in GLB (assets/WANTED.md) replaces the procedural hull
     if (ov) { for (const c of this.body.children) c.visible = false; this.body.add(ov); }
-    add(new THREE.BoxGeometry(0.62, 0.02, 1.5), glow(0xff2aa8, 1.2), 0, -0.31, -0.05);     // faint under-glow sheet
+    add(new THREE.BoxGeometry(0.62, 0.02, 1.5), glow(0xff2aa8, 0.55), 0, -0.31, -0.05);     // faint under-glow sheet
     if (withRider) { // fallback box rider (the skinned courier from characters/ replaces it when loaded)
     const suit = std(0x1a1b22, 0.6, 0.1);
     add(new THREE.CapsuleGeometry(0.2, 0.45, 4, 10), suit, 0, 0.72, 0.25, -0.75);
@@ -89,7 +89,7 @@ class Trail {
     this.geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     this.geo.setAttribute('age', new THREE.BufferAttribute(age, 1));
     this.geo.setIndex(idx);
-    const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+    const m = new THREE.MeshBasicNodeMaterial({ transparent: true, forceSinglePass: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
     const a = attribute('age', 'float');
     m.colorNode = vec3(col.r, col.g, col.b).mul(float(1).sub(a).pow(2.0).mul(3.0).mul(this.alpha));
     this.mesh = new THREE.Mesh(this.geo, m); this.mesh.frustumCulled = false; this.mesh.renderOrder = 8;

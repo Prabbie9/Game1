@@ -18,7 +18,11 @@ export function addNoodleBar(W: StacksWorld) {
     b(-4.6, 1.05, -1.9, 4.6, 1.12, -1.1, 'concrete', { surface: 'concrete' }),
     b(-5.5, 1.6, -4.4, 5.5, 1.7, -4.0, 'metal', { collide: 'none' }), b(-5.5, 2.4, -4.4, 5.5, 2.5, -4.0, 'metal', { collide: 'none' }), // shelves
   );
-  for (let i = -3; i <= 3; i += 1.5) W.boxes.push(b(i - 0.22, 0, -0.75, i + 0.22, 0.75, -0.3, 'metal', { collide: 'none' }));
+  // stools, bowls on the counter, jars and bottles on the shelves (prop kit: lathed / cylinder meshes)
+  const P = W.dressing.props;
+  for (let i = -3; i <= 3; i += 1.5) P.push({ kind: 'stool', pos: [x + i, y, z - 0.52], yaw: 0, size: [0, 0, 0], seed: 1.3 });
+  for (const sx of [-2.2, 0.6, 2.8]) P.push({ kind: 'bowl', pos: [x + sx, y + 1.12, z - 1.5], yaw: 0, size: [0, 0, 0], seed: 3.7 + sx });
+  for (const sy of [1.7, 2.5]) for (let i = -5.2; i < 5.2; i += 0.32 + ((i * 7.3) % 1 + 1) % 1 * 0.25) P.push({ kind: 'jar', pos: [x + i, y + sy, z - 4.2], yaw: 0, size: [0.06 + ((i * 3.1) % 1 + 1) % 1 * 0.05, 0.14 + ((i * 5.7) % 1 + 1) % 1 * 0.22, 0], seed: Math.abs(i * 13.7) });
   for (const lx of [-4, -1.3, 1.3, 4]) { W.dressing.props.push({ kind: 'lantern', pos: [x + lx, y + 2.9, z - 0.6], yaw: 0, size: [0.26, 0, 0] }); }
   W.lights.push({ pos: [x - 2.5, y + 2.6, z - 0.5], color: '#ffa04a', intensity: 22, range: 9 }, { pos: [x + 2.5, y + 2.6, z - 0.5], color: '#ff8a3a', intensity: 22, range: 9 }, { pos: [x, y + 2.2, z + 3.2], color: '#ffb36b', intensity: 10, range: 6 });
   W.dressing.props.push({ kind: 'warmwin', pos: [x, y + 1.7, z + 4.45], yaw: Math.PI, size: [7, 2.2, 0] }); // the window, from inside

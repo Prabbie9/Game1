@@ -5,9 +5,9 @@ import * as THREE from 'three/webgpu';
 
 const shape = (pts: [number, number][]) => { const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]); s.closePath(); return s; };
 /** Side profile (z, y) extruded across x with rounded bevels; centred on x. */
-export function profile(pts: [number, number][], width: number, bevel: number, smooth = true) {
+export function profile(pts: [number, number][], width: number, bevel: number, smooth = true, bevelSegments = 4) {
   const sh = shape(pts);
-  const g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.01, width - bevel * 2), bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel * 0.8, bevelSegments: 4, curveSegments: 6 });
+  const g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.01, width - bevel * 2), bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel * 0.8, bevelSegments, curveSegments: 1 });
   g.translate(0, 0, -(width - bevel * 2) / 2); g.rotateY(-Math.PI / 2);
   if (smooth) { g.deleteAttribute('normal'); const m = (g as any).toNonIndexed ? g : g; m.computeVertexNormals(); }
   return g;

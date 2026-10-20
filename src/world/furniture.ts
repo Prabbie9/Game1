@@ -2,7 +2,7 @@
 // machines, bins, benches, stalls, barriers and crates against street-facing walls (the kerb side and the road
 // stay clear), rooftop clutter. Solid pieces get a matching collider box (render: false) so physics stays in sync.
 import type { BoxDef } from './defs';
-import type { PropDef } from './kit';
+import { DECAL, type PropDef } from './kit';
 
 // keep job drops, fixers and spawn clear of furniture
 const KEEP_CLEAR: [number, number][] = [[-210, 236], [-300, 236], [0, 104], [290, -50], [-130, -172], [0, 115]];
@@ -46,3 +46,34 @@ export function roofClutter(props: PropDef[], R: () => number, x0: number, z0: n
   }
 }
 
+
+const decal = (props: PropDef[], x: number, y: number, z: number, yaw: number, w: number, l: number, type: number, r: number, vertical = 0) =>
+  props.push({ kind: 'decal', pos: [x, y, z], yaw, size: [w, l, vertical], seed: type + Math.min(0.999, r) });
+
+/** Road markings + wear along a straight street centreline (a → b), skipping `skip(x, z)` (junctions). */
+export function streetDecals(props: PropDef[], R: () => number, ax: number, az: number, bx: number, bz: number, hw: number, skip: (x: number, z: number) => boolean) {
+  const L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, nx = -uz, nz = ux;
+  const yaw = Math.atan2(ux, uz); // plane length (local y before laying flat) runs along the street
+  for (let d = 2; d < L - 2; d += 9) {
+    const x = ax + ux * d, z = az + uz * d; if (skip(x, z)) continue;
+    decal(props, x, 0, z, yaw, 0.16, 3.2, DECAL.dash, R());
+  }
+  for (let d = R() * 20; d < L; d += 14 + R() * 26) {
+    const o = (R() - 0.5) * hw * 1.6, x = ax + ux * d + nx * o, z = az + uz * d + nz * o; if (skip(x, z)) continue;
+    const k = R();
+    if (k < 0.5) decal(props, x, 0, z, R() * 6.28, 2 + R() * 4, 2 + R() * 4, DECAL.grime, R());
+    else if (k < 0.8) decal(props, x, 0, z, R() * 6.28, 0.6, 3 + R() * 5, DECAL.crack, R());
+    else decal(props, x, 0, z, 0, 0.8, 0.8, DECAL.manhole, R());
+  }
+}
+/** Zebra crossing across a street at (x, z): stripes run along the street direction `yaw`, spread across `hw`. */
+export function zebra(props: PropDef[], R: () => number, x: number, z: number, yaw: number, hw: number) {
+  const nx = Math.cos(yaw), nz = -Math.sin(yaw);
+  for (let o = -hw + 0.8; o < hw - 0.5; o += 1.2) decal(props, x + nx * o, 0, z + nz * o, yaw, 0.6, 3, DECAL.zebra, R());
+}
+/** Posters pasted on a wall face (centre cx, cz, normal yaw, width fw). */
+export function posters(props: PropDef[], R: () => number, cx: number, cz: number, yaw: number, fw: number) {
+  const tx = Math.cos(yaw), tz = -Math.sin(yaw), nx = Math.sin(yaw), nz = Math.cos(yaw);
+  const n = Math.floor(R() * 3);
+  for (let i = 0; i < n; i++) { const al = (R() - 0.5) * (fw - 2); decal(props, cx + tx * al + nx * 0.02, 1.4 + R() * 0.8, cz + tz * al + nz * 0.02, yaw, 0.7 + R() * 0.3, 1.0 + R() * 0.3, DECAL.poster, R(), 1); }
+}

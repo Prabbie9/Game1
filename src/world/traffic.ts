@@ -11,25 +11,29 @@ export interface Lane { a: [number, number, number]; b: [number, number, number]
 export class Traffic {
   group = new THREE.Group();
   constructor(lanes: Lane[]) {
-    const A: number[] = [], B: number[] = [], C: number[] = [];
+    const cars: { a: number[]; b: number[]; c: number[]; v: number }[] = [];
     let k = 0;
     for (const l of lanes) for (let i = 0; i < l.cars; i++, k++) {
-      A.push(...l.a, l.speed); B.push(...l.b, (i + ((k * 0.618) % 1) * 0.5) / l.cars); C.push((k * 0.37) % 1, k % 3, 0, 0);
+      cars.push({ a: [...l.a, l.speed], b: [...l.b, (i + ((k * 0.618) % 1) * 0.5) / l.cars], c: [(k * 0.37) % 1, k % 3, 0, 0], v: k % 3 });
     }
-    const n = A.length / 4; if (!n) return;
+    const n = cars.length; if (!n) return;
+    cars.sort((p, q) => p.v - q.v);
+    const A = cars.flatMap((c) => c.a), B = cars.flatMap((c) => c.b), C = cars.flatMap((c) => c.c);
+    const ranges = [0, 1, 2].map((v) => [cars.findIndex((c) => c.v === v), cars.length - [...cars].reverse().findIndex((c) => c.v === v)]).map(([s0, e]) => (s0 < 0 ? [0, 0] : [s0, e]));
+    // lane motion: position along the lane, end fades so cars don't pop, local → world frame
+    const frame = (iA: any, iB: any) => {
+      const a = iA.xyz, b = iB.xyz, seg = b.sub(a), len = seg.length(), dir = seg.div(len);
+      const t = fract(time.mul(iA.w).div(len).add(iB.w));
+      const p = a.add(seg.mul(t));
+      const endFade = smoothstep(0.0, 0.04, t).mul(smoothstep(1.0, 0.96, t));
+      const sideV = vec3(dir.z, 0, dir.x.negate());
+      return { endFade, toWorld: (l: any) => p.add(sideV.mul(l.x)).add(vec3(0, l.y, 0)).add(dir.mul(l.z.negate())) };
+    };
     const iA = instancedBufferAttribute(new THREE.InstancedBufferAttribute(new Float32Array(A), 4));
     const iB = instancedBufferAttribute(new THREE.InstancedBufferAttribute(new Float32Array(B), 4));
-    const iC = instancedBufferAttribute(new THREE.InstancedBufferAttribute(new Float32Array(C), 4));
-    const a = iA.xyz, b = iB.xyz, seg = b.sub(a), len = seg.length(), dir = seg.div(len);
-    const t = fract(time.mul(iA.w).div(len).add(iB.w));
-    const p = a.add(seg.mul(t));
-    // fade in/out at lane ends so cars don't pop
-    const endFade = smoothstep(0.0, 0.04, t).mul(smoothstep(1.0, 0.96, t));
-    const sideV = vec3(dir.z, 0, dir.x.negate());
-    const toWorld = (l: any) => p.add(sideV.mul(l.x)).add(vec3(0, l.y, 0)).add(dir.mul(l.z.negate()));
+    const { endFade, toWorld } = frame(iA, iB);
 
-    // bodies (local -z = forward): three silhouettes (sedan / van / sports wedge) in one geometry; each instance
-    // keeps only its variant's vertices. glow: 0 body, 1 tail, 2 head, 3 underglow, 4 cabin glass
+    // bodies (local -z = forward): three silhouettes (sedan / van / sports wedge). glow: 0 body, 1 tail, 2 head, 3 underglow, 4 cabin glass
     const parts: [THREE.BufferGeometry, number, number][] = [];
     const put = (g: THREE.BufferGeometry, gl: number, v: number) => { if (g.index === null) { const ii: number[] = []; for (let q = 0; q < g.attributes.position.count; q++) ii.push(q); g.setIndex(ii); } parts.push([g, gl, v]); };
     const bx = (sx: number, sy: number, sz: number, x: number, y: number, z: number, gl: number, v: number) => { const g = new THREE.BoxGeometry(sx, sy, sz); g.translate(x, y, z); put(g, gl, v); };
@@ -45,29 +49,35 @@ export class Traffic {
     ];
     const W = [1.9, 2.0, 2.0];
     BODY.forEach((pts, v) => {
-      put(profile(pts, W[v], 0.12), 0, v);
-      put(profile(GLASS[v], W[v] + 0.04, 0.02), 4, v);
+      put(profile(pts, W[v], 0.12, true, 1), 0, v);
+      put(profile(GLASS[v], W[v] + 0.04, 0, true), 4, v);
       const zr = Math.max(...pts.map((q) => q[0])) + 0.02, zf = Math.min(...pts.map((q) => q[0])) - 0.02;
       bx(W[v] * 0.86, 0.09, 0.05, 0, v === 1 ? 0.55 : 0.12, zr, 1, v); bx(W[v] * 0.8, 0.07, 0.05, 0, v === 1 ? 0.3 : 0.05, zf, 2, v);
       bx(W[v] * 0.78, 0.04, 3.6, 0, -0.36, 0, 3, v);
     });
-    const pos: number[] = [], nrm: number[] = [], gla: number[] = [], vra: number[] = [], idx: number[] = []; let off = 0;
-    for (const [g, gl, v] of parts) { const P = g.attributes.position, N = g.attributes.normal; for (let i = 0; i < P.count; i++) { pos.push(P.getX(i), P.getY(i), P.getZ(i)); nrm.push(N.getX(i), N.getY(i), N.getZ(i)); gla.push(gl); vra.push(v); } const I = g.index!; for (let i = 0; i < I.count; i++) idx.push(I.getX(i) + off); off += P.count; }
-    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); geo.setAttribute('glow', new THREE.Float32BufferAttribute(gla, 1)); geo.setAttribute('variant', new THREE.Float32BufferAttribute(vra, 1)); geo.setIndex(idx);
-    const m = new THREE.MeshStandardNodeMaterial();
-    const gl = attribute('glow', 'float');
-    const keep = step(abs(attribute('variant', 'float').sub(floor(iC.y))), float(0.5));
-    m.positionNode = toWorld(positionLocal.mul(endFade).mul(keep));
-    m.colorNode = mix(mix(vec3(0.05, 0.055, 0.07), vec3(0.2, 0.05, 0.1), iC.x.mul(0.5)), vec3(0.01, 0.015, 0.02), step(3.5, gl));
-    m.metalnessNode = float(0.7); m.roughnessNode = float(0.3);
-    const em = mix(mix(vec3(0), vec3(1.0, 0.05, 0.08).mul(6.0), step(0.5, gl).mul(step(gl, float(1.5)))),
-      mix(vec3(0.9, 0.95, 1.0).mul(8.0), mix(vec3(0.1, 0.9, 1.0), vec3(1.0, 0.2, 0.7), step(0.5, iC.x)).mul(0.6), step(2.5, gl)), step(1.5, gl));
-    m.emissiveNode = em.add(vec3(1.0, 0.7, 0.45).mul(step(3.5, gl)).mul(0.25));
-    const cars = new THREE.InstancedMesh(geo, m, n); cars.frustumCulled = false; this.group.add(cars);
+    // one instanced mesh per silhouette (instances were sorted by variant, so each mesh owns a contiguous slice)
+    for (let v = 0; v < 3; v++) {
+      const pos: number[] = [], nrm: number[] = [], gla: number[] = [], idx: number[] = []; let off = 0;
+      for (const [g, gl, pv] of parts) { if (pv !== v) continue; const P = g.attributes.position, N = g.attributes.normal; for (let i = 0; i < P.count; i++) { pos.push(P.getX(i), P.getY(i), P.getZ(i)); nrm.push(N.getX(i), N.getY(i), N.getZ(i)); gla.push(gl); } const I = g.index!; for (let i = 0; i < I.count; i++) idx.push(I.getX(i) + off); off += P.count; }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); geo.setAttribute('glow', new THREE.Float32BufferAttribute(gla, 1)); geo.setIndex(idx);
+      const [v0, v1] = ranges[v]; if (v1 <= v0) continue;
+      const sl = (arr: number[]) => instancedBufferAttribute(new THREE.InstancedBufferAttribute(new Float32Array(arr.slice(v0 * 4, v1 * 4)), 4));
+      const F = frame(sl(A), sl(B));
+      const vC = sl(C);
+      const m = new THREE.MeshStandardNodeMaterial();
+      const gl = attribute('glow', 'float');
+      m.positionNode = F.toWorld(positionLocal.mul(F.endFade));
+      m.colorNode = mix(mix(vec3(0.05, 0.055, 0.07), vec3(0.2, 0.05, 0.1), vC.x.mul(0.5)), vec3(0.01, 0.015, 0.02), step(3.5, gl));
+      m.metalnessNode = float(0.7); m.roughnessNode = float(0.3);
+      const em = mix(mix(vec3(0), vec3(1.0, 0.05, 0.08).mul(6.0), step(0.5, gl).mul(step(gl, float(1.5)))),
+        mix(vec3(0.9, 0.95, 1.0).mul(8.0), mix(vec3(0.1, 0.9, 1.0), vec3(1.0, 0.2, 0.7), step(0.5, vC.x)).mul(0.6), step(2.5, gl)), step(1.5, gl));
+      m.emissiveNode = em.add(vec3(1.0, 0.7, 0.45).mul(step(3.5, gl)).mul(0.25));
+      const cars = new THREE.InstancedMesh(geo, m, v1 - v0); cars.frustumCulled = false; this.group.add(cars);
+    }
 
     // light trails: a long quad behind each car, red tail streak fading out
     const tg = new THREE.PlaneGeometry(1.4, 1, 1, 1); tg.rotateX(-Math.PI / 2); tg.translate(0, 0.1, 0.5); // local z 0..1 behind the car
-    const tm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+    const tm = new THREE.MeshBasicNodeMaterial({ transparent: true, forceSinglePass: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
     const L = float(14.0);
     const tl = positionLocal;
     tm.positionNode = toWorld(vec3(tl.x, tl.y, tl.z.mul(L).add(2.2)).mul(endFade));

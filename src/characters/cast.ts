@@ -11,13 +11,16 @@ export class Cast {
   private seat = new THREE.Group();
   onFoot = false;
   private lean = 0; private steer = 0; private airT = 0;
-  constructor(private scene: THREE.Scene, private data: HumanData, bikeBody: THREE.Object3D) {
-    this.courier = new Hero(data, OUTFITS.courier);
+  /** One permanent soft key light that follows the nearest named NPC (a fixed light count keeps shaders stable). */
+  key = new THREE.PointLight(0xcfe2ff, 0, 7, 2);
+  constructor(private scene: THREE.Scene, private data: HumanData, bikeBody: THREE.Object3D, private npcLod: 0 | 1 = 0) {
+    this.courier = new Hero(data, OUTFITS.courier, undefined, npcLod); // Low tier: LOD1 for everyone
     // seat anchor: the rig faces +z, the bike's forward is -z → turn it round; hips sit on the saddle
-    this.seat.position.set(0, -0.32, 0.36); this.seat.rotation.y = Math.PI;
+    this.seat.position.set(0, -0.36, 0.04); this.seat.rotation.y = Math.PI;
     bikeBody.add(this.seat);
     this.seat.add(this.courier.root);
     this.courier.play('Driving_Loop', 0);
+    scene.add(this.key);
   }
 
   /** Where the rider's hands are, in bike-body space (the hull builds its handlebars there). */
@@ -30,14 +33,14 @@ export class Cast {
 
   addFixer(id: string, pos: [number, number, number], faceYaw: number) {
     const of = OUTFITS[id]; if (!of) return;
-    const h = new Hero(this.data, of, this.scene);
+    const h = new Hero(this.data, of, this.scene, this.npcLod);
     h.root.position.set(pos[0], pos[1], pos[2]); h.root.rotation.y = faceYaw;
     h.play(id === 'ume' ? 'Idle_Loop' : 'Idle_Talking_Loop', 0, 0.8 + Math.random() * 0.3);
     h.mixer.setTime(Math.random() * 3);
     this.fixers.set(id, h);
   }
   addKiso(pos: [number, number, number], yaw: number) {
-    this.kiso = new Hero(this.data, OUTFITS.kiso, this.scene);
+    this.kiso = new Hero(this.data, OUTFITS.kiso, this.scene, this.npcLod);
     this.kiso.root.position.set(...pos); this.kiso.root.rotation.y = yaw;
     this.kiso.play('Idle_Loop', 0);
   }
@@ -82,5 +85,12 @@ export class Cast {
   updateNPCs(dt: number, cam: THREE.Vector3) {
     for (const h of this.fixers.values()) if (h.root.position.distanceToSquared(cam) < 90 * 90) { h.root.visible = true; h.update(dt); } else h.root.visible = false;
     if (this.kiso) { const near = this.kiso.root.position.distanceToSquared(cam) < 40 * 40; this.kiso.root.visible = near; if (near) this.kiso.update(dt); }
+    let best: Hero | null = null, bd = 30 * 30;
+    for (const h of [...this.fixers.values(), this.kiso]) if (h && h.root.visible) { const d = h.root.position.distanceToSquared(cam); if (d < bd) { bd = d; best = h; } }
+    if (best) {
+      const r = best.root, fy = r.rotation.y; // light from in front of the face, above head height
+      this.key.position.set(r.position.x + Math.sin(fy) * 1.3, r.position.y + 2.4, r.position.z + Math.cos(fy) * 1.3);
+      this.key.intensity = 9 * Math.max(0, 1 - Math.sqrt(bd) / 30);
+    } else this.key.intensity = 0;
   }
 }

@@ -87,10 +87,18 @@ export function facade(variant: 'panel' | 'brick') {
   const ci = floor(cu).mod(97.0), cj = floor(cv).mod(89.0), cs = floor(seed.add(0.5)).mod(53.0); // round: interpolated attributes jitter
   const sh = (k: number) => fract(sin(ci.mul(12.9898 + k).add(cj.mul(78.233 - k)).add(cs.mul(37.719 + k))).mul(43758.5453));
   const r = sh(0), r2 = sh(1.7), r3 = sh(3.1);
-  const winU = smoothstep(0.22, 0.25, fu).mul(smoothstep(0.78, 0.75, fu));
+  // per-building window proportions: narrow / standard / wide ribbon (mU = side margin of the cell)
+  const bw = fract(sin(cs.mul(53.3)).mul(24634.6345));
+  const mU = mix(mix(float(0.3), float(0.25), step(0.35, bw)), float(0.1), step(0.8, bw));
+  const winU = smoothstep(mU.sub(0.03), mU, fu).mul(smoothstep(float(1).sub(mU).add(0.03), float(1).sub(mU), fu));
   const winV = smoothstep(0.3, 0.33, fv).mul(smoothstep(0.78, 0.75, fv));
+  // mullions (2 or 3 panes) + a transom bar: breaks the "lit square" read at every distance
+  const wu = fu.sub(mU).div(float(1).sub(mU.mul(2))), wv = fv.sub(0.33).div(0.42);
+  const panes = mix(float(2), float(3), step(0.5, fract(bw.mul(7.0))));
+  const mull = smoothstep(0.44, 0.47, abs(fract(wu.mul(panes)).sub(0.5))).max(smoothstep(0.025, 0.012, abs(wv.sub(0.74))));
   const groundFloor = step(y, float(4.2));
-  const isWin = winU.mul(winV).mul(vertical).mul(float(1).sub(groundFloor));
+  const isWin0 = winU.mul(winV).mul(vertical).mul(float(1).sub(groundFloor));
+  const isWin = isWin0.mul(float(1).sub(mull.mul(0.85)));
   const lit = step(r, litD.mul(mix(0.5, 1.0, U.night))).mul(isWin);
   // warm / cool / magenta interiors, curtains gradient
   const warm = vec3(1.0, 0.55, 0.22), cool = vec3(0.55, 0.85, 1.0), mag = vec3(1.0, 0.3, 0.75);
@@ -117,14 +125,16 @@ export function facade(variant: 'panel' | 'brick') {
   // wall surface
   const grime = mx_fractal_noise_float(vec3(u.mul(0.6), y.mul(0.05), seed), 3, 2.0, 0.5, 1.0);
   const streak = n2(vec2(u.mul(3.0), y.mul(0.08).add(seed))).mul(0.5).add(0.5);
-  let wall;
+  let wall, seams;
   if (variant === 'brick') {
     const bu = u.mul(4.2).add(step(0.5, fract(y.mul(6.6))).mul(0.5));
     const mortar = step(0.9, fract(bu)).max(step(0.86, fract(y.mul(6.6))));
+    seams = mortar;
     const brickCol = mix(vec3(0.22, 0.09, 0.07), vec3(0.3, 0.14, 0.1), fract(sin(floor(bu).mod(101.0).mul(12.9898).add(floor(y.mul(6.6)).mod(103.0).mul(78.233))).mul(43758.5453)));
     wall = mix(brickCol, vec3(0.13, 0.12, 0.11), mortar);
   } else {
     const panel = step(0.97, fract(u.div(1.5))).max(step(0.97, fract(y.div(1.7))));
+    seams = panel;
     wall = mix(vec3(0.16, 0.165, 0.18), vec3(0.07, 0.07, 0.08), panel);
   }
   // per-building tint (concrete grey / teal / rust / cream) so blocks don't read as one brown slab
@@ -132,8 +142,8 @@ export function facade(variant: 'panel' | 'brick') {
   const tint = mix(mix(vec3(0.85, 0.9, 1.0), vec3(0.55, 0.85, 0.85), step(0.35, bt)), mix(vec3(1.15, 0.75, 0.6), vec3(1.2, 1.1, 0.9), step(0.85, bt)), step(0.6, bt));
   // floor ledges + pilasters + dark frame around each window opening
   const ledge = smoothstep(0.035, 0.0, abs(fv.sub(0.04))).mul(vertical);
-  const frame = winU.mul(winV).oneMinus().mul(smoothstep(0.18, 0.22, fu).mul(smoothstep(0.82, 0.78, fu)).mul(smoothstep(0.26, 0.3, fv)).mul(smoothstep(0.82, 0.78, fv)));
-  const sill = smoothstep(0.24, 0.26, fu).mul(smoothstep(0.76, 0.74, fu)).mul(smoothstep(0.27, 0.29, fv)).mul(smoothstep(0.33, 0.31, fv)).mul(vertical).mul(float(1).sub(groundFloor));
+  const frame = winU.mul(winV).oneMinus().mul(smoothstep(mU.sub(0.07), mU.sub(0.03), fu).mul(smoothstep(float(1.07).sub(mU), float(1.03).sub(mU), fu)).mul(smoothstep(0.26, 0.3, fv)).mul(smoothstep(0.82, 0.78, fv))).add(mull.mul(isWin0)).clamp(0, 1);
+  const sill = smoothstep(mU.sub(0.01), mU.add(0.01), fu).mul(smoothstep(float(1.01).sub(mU), float(0.99).sub(mU), fu)).mul(smoothstep(0.27, 0.29, fv)).mul(smoothstep(0.33, 0.31, fv)).mul(vertical).mul(float(1).sub(groundFloor));
   const wallCol0 = wall.mul(tint).mul(float(0.75).add(grime.mul(0.35))).mul(mix(float(1), streak.mul(0.5).add(0.55), U.wet))
     .mul(float(1).sub(ledge.mul(0.45))).mul(float(1).sub(frame.mul(0.6)));
   const wallCol = mix(wallCol0, vec3(0.32, 0.31, 0.3), sill.mul(0.8));
@@ -145,6 +155,9 @@ export function facade(variant: 'panel' | 'brick') {
   m.roughnessNode = clamp(mix(mix(float(0.85), float(0.45), U.wet.mul(streak)), float(0.08), isWin), 0.05, 1);
   m.metalnessNode = isWin.mul(0.2);
   m.emissiveNode = winGlow;
+  // relief: mortar joints / panel seams sunk, window openings recessed behind a raised frame, ledges proud
+  const relief = seams.mul(-0.006).add(isWin.mul(-0.03)).add(frame.mul(0.01)).add(ledge.mul(0.015)).add(sill.mul(0.012)).mul(vertical);
+  m.normalNode = bumpMap(relief, float(1.0));
   return m;
 }
 
@@ -197,7 +210,7 @@ export function emissive(col: number, strength: number) {
 
 /** Neon sign face: canvas texture as emissive with tube flicker. */
 export function neon(tex: THREE.Texture, col: THREE.Color, strength: number, flicker: number, seed: number) {
-  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, forceSinglePass: true, depthWrite: false, side: THREE.DoubleSide });
   const { texture: tx, uv } = THREE.TSL as any;
   const s = tx(tex, uv());
   const fl = float(1).sub(step(0.82, mx_noise_float(vec3(U.time.mul(9.0), seed, 0))).mul(flicker).mul(U.flicker).mul(0.85));
@@ -223,7 +236,7 @@ export function water() {
 
 /** Fake volumetric light shaft (additive cone). v = 0 at the lamp, 1 at the base. */
 export function lightCone(col: THREE.Color, strength: number) {
-  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, forceSinglePass: true, depthWrite: false, side: THREE.DoubleSide });
   const { uv, positionView, normalView } = THREE.TSL as any;
   const v = uv().y;
   const fres = abs(dot(normalize(positionView).negate(), normalView));

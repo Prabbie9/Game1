@@ -8,7 +8,7 @@
 import * as THREE from 'three/webgpu';
 import {
   attribute, instancedDynamicBufferAttribute, textureLoad, ivec2, int, float, vec3, vec4, vertexIndex, mix, uniform, uniformArray,
-  varying, transformNormalToView, positionLocal, smoothstep, length, vec2, uv, step, abs, fract, cameraPosition, normalize, cross, atan,
+  varying, transformNormalToView, positionLocal, smoothstep, length, vec2, uv, step, abs, fract, cameraPosition, normalize, cross, atan, cos, sin,
 } from 'three/tsl';
 import { Hero, LAYER, OUTFITS, characterMaterial, makeBones, type HumanData, type Outfit } from './humans';
 import { distFade } from '../materials/materials';
@@ -59,9 +59,13 @@ export class HumanCrowd {
   private clipInfo: { start: number; len: number; dur: number }[] = [];
   private rows = 1;
   midR = 80; farR = 300; nearR = 25;
+  /** false (Low tier): no VAT band at all — pooled heroes up close, silhouettes beyond (its first draw is very slow on weak GPUs) */
+  vat = true;
   stats = { near: 0, mid: 0, far: 0 };
+  /** VAT position / normal textures (uploaded one per task before the first frame, see main.ts) */
+  vatTex: THREE.DataTexture[] = [];
 
-  constructor(private data: HumanData, segs: WalkSeg[], density: number, poolSize: number, private vatFps = 15, seed = 7) {
+  constructor(private data: HumanData, segs: WalkSeg[], density: number, poolSize: number, private vatFps = 15, seed = 7, heroLod: 0 | 1 = 0) {
     let s = seed; const R = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
     for (const g of segs) {
       const len = Math.hypot(g.b[0] - g.a[0], g.b[1] - g.a[1]);
@@ -73,8 +77,8 @@ export class HumanCrowd {
       }
     }
     for (let i = 0; i < poolSize; i++) {
-      const hero = new Hero(data, OUTFITS.courier); hero.root.visible = false; this.group.add(hero.root);
-      this.pool.push({ hero, person: null, u: (hero.mesh.material as any).__u });
+      const hero = new Hero(data, OUTFITS.courier, undefined, heroLod); hero.root.visible = false; this.group.add(hero.root);
+      this.pool.push({ hero, person: null, u: hero.mesh.userData.hu });
     }
   }
 
@@ -89,6 +93,7 @@ export class HumanCrowd {
       this.clipInfo.push({ start: frames.length, len: n, dur: c.frames / c.fps });
       for (let f = 0; f < n; f++) frames.push({ clip: name, f: Math.floor((f / n) * c.frames) });
     }
+    if (!this.vat) { const z = new Uint16Array(4); const mk1 = () => new THREE.DataTexture(z, 1, 1, THREE.RGBAFormat, THREE.HalfFloatType); this.buildMeshes(mk1(), mk1(), frames.length); return; }
     const H = frames.length * this.rows;
     const pos = new Uint16Array(W * H * 4), nrm = new Uint16Array(W * H * 4);
     const bones = makeBones(d); const holder = new THREE.Object3D(); holder.add(bones[0]);
@@ -118,7 +123,8 @@ export class HumanCrowd {
       }
     }
     const mk = (a: Uint16Array) => { const t = new THREE.DataTexture(a, W, H, THREE.RGBAFormat, THREE.HalfFloatType); t.needsUpdate = true; t.magFilter = t.minFilter = THREE.NearestFilter; return t; };
-    this.buildMeshes(mk(pos), mk(nrm), frames.length);
+    this.vatTex = [mk(pos), mk(nrm)];
+    this.buildMeshes(this.vatTex[0], this.vatTex[1], frames.length);
   }
 
   private buildMeshes(posTex: THREE.DataTexture, nrmTex: THREE.DataTexture, totalFrames: number) {
@@ -145,22 +151,22 @@ export class HumanCrowd {
       positionNode: worldPos, normalNode: transformNormalToView(vN) });
     void layerI; void fr; void totalFrames;
     this.mid = new THREE.InstancedMesh(this.data.lod1, midMat, max); this.mid.frustumCulled = false; this.mid.count = 0; this.mid.castShadow = false;
-    this.group.add(this.mid);
+    if (this.vat) this.group.add(this.mid);
 
     // ---- FAR: billboard silhouettes (head + shoulders + legs shape) ----
     this.farA = new THREE.InstancedBufferAttribute(new Float32Array(max * 4), 4); this.farA.setUsage(THREE.DynamicDrawUsage);
     const fA = instancedDynamicBufferAttribute(this.farA);
     const bq = new THREE.PlaneGeometry(0.62, 1.8); bq.translate(0, 0.9, 0);
-    const fm = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
-    const toCam = normalize(vec3(cameraPosition.x.sub(fA.x), 0, cameraPosition.z.sub(fA.z)));
-    const right = cross(vec3(0, 1, 0), toCam);
+    const fm = new THREE.MeshBasicNodeMaterial({ alphaTest: 0.5 }); // alpha-tested silhouettes: opaque pass, no sorting
+    // facing: the CPU writes the camera-facing yaw into w (keeps camera uniforms out of this vertex shader)
+    const right = vec3(cos(fA.w), 0, sin(fA.w).negate());
     fm.positionNode = fA.xyz.add(right.mul(positionLocal.x)).add(vec3(0, positionLocal.y, 0));
     const u2 = uv(), px = u2.x.sub(0.5), py = u2.y;
     const head = smoothstep(0.1, 0.07, length(vec2(px, py.sub(0.9).mul(1.4))));
     const body = step(abs(px), float(0.22).sub(py.sub(0.75).max(0).mul(1.4))).mul(step(0.42, py)).mul(step(py, float(0.82)));
     const legs = step(abs(abs(px).sub(0.07)), float(0.055)).mul(step(py, float(0.45)));
     const a = head.add(body).add(legs).clamp(0, 1);
-    fm.colorNode = vec3(0.012, 0.012, 0.016); fm.opacityNode = a.mul(0.85);
+    fm.colorNode = vec3(0.012, 0.012, 0.016); fm.opacityNode = a;
     this.far = new THREE.InstancedMesh(bq, fm, max); this.far.frustumCulled = false; this.far.count = 0; this.group.add(this.far);
 
     // ---- umbrellas (mid + far): ribbed canopy with a glowing rim, held above the head ----
@@ -206,7 +212,7 @@ export class HumanCrowd {
       else if (p.d < this.midR && mi < max) {
         const ff = (p.clipT / ci.dur) * ci.len, f0 = Math.floor(ff) % ci.len, f1 = (f0 + 1) % ci.len;
         mA.set([p.x, p.y, p.z, p.yaw], mi * 4); mB.set([ci.start + f0, ci.start + f1, ff - Math.floor(ff), p.variant * 16 + p.pal], mi * 4); mi++;
-      } else if (fi < max) { fA.set([p.x, p.y, p.z, 0], fi * 4); fi++; }
+      } else if (fi < max) { fA.set([p.x, p.y, p.z, Math.atan2(cx - p.x, cz - p.z)], fi * 4); fi++; }
       if (p.umb && ui < max && p.d > 2) { uA.set([p.x, p.y, p.z, p.yaw], ui * 4); ui++; }
     }
     // nearest N become full heroes; overflow drops to the VAT tier
@@ -222,7 +228,8 @@ export class HumanCrowd {
       slot.hero.root.visible = true; slot.hero.root.position.set(p.x, p.y, p.z); slot.hero.root.rotation.y = p.yaw;
       void ci;
     });
-    for (let k = this.pool.length; k < near.length && mi < max; k++) {
+    if (!this.vat) for (let k = this.pool.length; k < near.length && fi < max; k++) { const p = near[k]; fA.set([p.x, p.y, p.z, Math.atan2(cx - p.x, cz - p.z)], fi * 4); fi++; }
+    else for (let k = this.pool.length; k < near.length && mi < max; k++) {
       const p = near[k], ci = this.clipInfo[p.mode], ff = (p.clipT / ci.dur) * ci.len, f0 = Math.floor(ff) % ci.len;
       mA.set([p.x, p.y, p.z, p.yaw], mi * 4); mB.set([ci.start + f0, ci.start + (f0 + 1) % ci.len, ff - Math.floor(ff), p.variant * 16 + p.pal], mi * 4); mi++;
     }
@@ -235,10 +242,10 @@ export class HumanCrowd {
 
   private dress(slot: { hero: Hero; u: any }, p: Person) {
     const u = slot.u; if (!u) return;
-    u.mask.value = MASKS[p.variant];
+    u.mask = MASKS[p.variant];
     const cols = layerColors(PAL[p.pal]);
-    u.colors.array.forEach((c: THREE.Color, i: number) => c.setHex(cols[i]));
-    u.accent.value.setHex(PAL[p.pal][6]); u.skin.value.setHex(PAL[p.pal][7]);
+    u.colors.forEach((c: THREE.Color, i: number) => c.setHex(cols[i]));
+    u.accent.setHex(PAL[p.pal][6]); u.skin.setHex(PAL[p.pal][7]);
   }
 }
 export const _cw = { vec4, uniform, Outfit: null as unknown as Outfit };
