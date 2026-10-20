@@ -6,9 +6,9 @@ import { PRESETS, RANGES, type Tuning, cloneTuning } from '../vehicle/tuning';
 
 export interface Settings {
   tier: 'low' | 'medium' | 'high'; fovOffset: number; motionBlur: boolean; shake: boolean; reduceFlicker: boolean;
-  music: boolean; volume: number; preset: string;
+  music: boolean; volume: number; preset: string; tod: 'dusk' | 'night' | 'late'; weather: 'storm' | 'rain' | 'drizzle' | 'clear';
 }
-export const DEFAULT_SETTINGS: Settings = { tier: 'high', fovOffset: 0, motionBlur: true, shake: true, reduceFlicker: false, music: true, volume: 0.8, preset: 'Balanced' };
+export const DEFAULT_SETTINGS: Settings = { tier: 'high', fovOffset: 0, motionBlur: true, shake: true, reduceFlicker: false, music: true, volume: 0.8, preset: 'Balanced', tod: 'night', weather: 'rain' };
 
 export function loadSettings(): Settings {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem('nc.settings') || '{}') }; } catch { return { ...DEFAULT_SETTINGS }; }
@@ -147,6 +147,8 @@ export class UI {
     const s = this.settings, ch = () => { saveSettings(s); this.hooks.onSettings(s); };
     this.renderMenu('SETTINGS', 'QUALITY + COMFORT', [
       { label: 'Quality', kind: 'choice', options: ['low', 'medium', 'high'], get: () => s.tier, set: (v) => { s.tier = v as Settings['tier']; ch(); } },
+      { label: 'Time of day', kind: 'choice', options: ['dusk', 'night', 'late'], get: () => s.tod, set: (v) => { s.tod = v as Settings['tod']; ch(); } },
+      { label: 'Weather', kind: 'choice', options: ['storm', 'rain', 'drizzle', 'clear'], get: () => s.weather, set: (v) => { s.weather = v as Settings['weather']; ch(); } },
       { label: 'Field of view', kind: 'slider', min: -15, max: 20, step: 1, get: () => s.fovOffset, set: (v) => { s.fovOffset = v; ch(); }, fmt: (v) => (v > 0 ? '+' : '') + v + '°' },
       { label: 'Motion blur', kind: 'toggle', get: () => s.motionBlur, set: (v) => { s.motionBlur = v; ch(); } },
       { label: 'Camera shake', kind: 'toggle', get: () => s.shake, set: (v) => { s.shake = v; ch(); } },

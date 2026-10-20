@@ -63,6 +63,7 @@ export class Pursuer {
     return occ.los(this.pos.x, this.pos.y - 0.5, this.pos.z, p.x, p.y + 0.6, p.z);
   }
 
+  static steadyStrobes = false; // comfort: reduce flashing
   update(dt: number, p: PlayerView, seen: boolean) {
     const S = SPEC[this.kind];
     this.t += dt;
@@ -92,7 +93,7 @@ export class Pursuer {
     this.aim.lerp(a, 1 - Math.exp(-(this.tracking ? 6 : 2) * dt)).normalize();
     this.mesh.position.copy(this.pos);
     this.cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), this.aim);
-    this.mesh.traverse((o) => { if (o.name === 'strobe') (o as THREE.Mesh).visible = Math.sin(this.t * 14 + (o.position.x > 0 ? Math.PI : 0)) > 0; });
+    this.mesh.traverse((o) => { if (o.name === 'strobe') (o as THREE.Mesh).visible = Pursuer.steadyStrobes || Math.sin(this.t * 14 + (o.position.x > 0 ? Math.PI : 0)) > 0; });
   }
 }
 

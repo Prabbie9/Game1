@@ -1,9 +1,10 @@
 # PROGRESS
-NEXT STEP: M5: build + browser-test on-foot (F to dismount, walk/sprint/jump, enter Hoshi interior via door), fix, then M5 gates + final shots + FINAL REPORT.md.
+NEXT STEP: Polish pass (budget remaining): optional — profile High tier draw calls, tighten Old Market lighting; otherwise DONE. Read FINAL REPORT.md.
 
-PLAYABLE BUILD: M4 checkpoint (jobs, heat, map, upgrades, save + Old Market, photo mode, ghosts, time trial) — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/.
+PLAYABLE BUILD: M5 final — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/ (= M5).
 
 ## Done
+- M5: showpiece (photo mode, Old Market, ghosts, time trial, on-foot + noodle bar); checkpoint builds/M5-checkpoint; FINAL REPORT.md written.
 - M4: core loop (jobs, heat, HUD, map, upgrades, save); checkpoint builds/M4-checkpoint.
 - M3: Stacks zone + streaming, crowds, traffic, tram; checkpoint builds/M3-checkpoint.
 - M2: look slice (Hoshi Street), 3 look rounds, checkpoint builds/M2-checkpoint (smoke OK on file://).
@@ -46,8 +47,14 @@ PLAYABLE BUILD: M4 checkpoint (jobs, heat, map, upgrades, save + Old Market, pho
 - FUN GATE: PASS (see PLAYTEST.md). UNPLAYED: needs human.
 - LOOK GATE: gameplay captures (shots/m4_gameplay_sheet.png) + reference shots re-captured (shots/m4_shot_*). Defects fixed: fixer beams washed over reference shot 5 (now hidden in shots/photo mode, subtler in play); job toasts overlap the compass (accepted); warm window still a little bright (emissive lowered again).
 
+## M5 report (showpiece)
+- Built: photo mode, Old Market zone, ghost replays, Lantern Run time trial (stretch job), on-foot (walk/sprint/jump) with mount/dismount, Hoshi Noodle Bar interior (door fade/teleport), time-of-day + weather settings, steady strobes under reduce-flashing. Cut: near characters (no reachable asset source), tram-top escape job, rooftop driving.
+- FUN GATE: PASS (bot + browser proxies, PLAYTEST.md). UNPLAYED: needs human.
+- LOOK GATE: final set shots/m5_sheet.png (7 reference + 3 extras). Fixed this round: fixer beams hidden in shots, Hoshi frontage kept clean of random signs, warm window toned to amber. Crushed 0 %, clipped ≤ 0.02 %.
+- Smoke: 13 views PASS on the single file via file://.
+
 ## In progress
-- M5 showpiece: photo mode DONE, Old Market DONE, ghost replays DONE, stretch job (time trial) DONE; on-foot + noodle bar interior next
+- nothing blocking; see FINAL REPORT.md
 
 ## Decisions
 - three r186 (WebGPURenderer + RenderPipeline), Rapier compat 0.21 in a worker, Vite 7, TS 5.9.

@@ -26,6 +26,12 @@ Layers: street → canal edge → elevated Skyway → tram deck → rooftops (ra
 Landmarks: Wan Tower (giant hologram), Hoshi noodle bar (the one warm window), The Drain (underpass/tunnel), Pinwheel ramps, canal locks.
 Old Market (zone 2): low roofs, amber lanterns, steam vents, awnings, tangled cables, narrow lanes.
 
+## As built (M3–M5)
+- The Stacks: x/z −350..350. Streets: N–S x = −300, −210, −130, 0 (south of plaza), 35 (north of Skyway end), 100 (north of the bend), 190, 270; E–W z = −300, −230, −110, 60, 220, 300 (+ −90, 70 east). The Ring elevated lane over z = −230 (+12 m) with ramps at x −345 (west) and 292 (east). Tram line over z = 220 (+8 m). East canal x 300–326 (bank ramps at z −50 and 150). Wan Tower at (−170, −170). Hoshi Street slice in the middle (x −95..135, z −195..155).
+- Old Market: x −1000..−360, z −320..320, lanes continue the Stacks' E–W streets; z −230 leads straight onto the Ring's west ramp.
+- Fixers: Mama Kiso (beside Hoshi), Dex (canal west bank, x 290 z −50), Volt (x −130 z −172, Wan Tower), Granny Ume (x −354 z 70, market gate).
+- Hoshi Noodle Bar interior lives at y −60 under the plaza; the door fades + teleports.
+
 ## M2 look slice (lives inside The Stacks, near Hoshi)
 ~220 m street with a 35° bend, Skyway passing overhead, an alley branching off (steam, laundry lines), ending at the canal edge.
 

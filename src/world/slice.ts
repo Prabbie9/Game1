@@ -121,7 +121,7 @@ export function buildSlice(opts: { embed?: boolean } = {}): SliceWorld {
           const sx = fx + Math.sin(-yaw) * along * 0 - Math.sin(yaw) * -along - rx * side * 1.0, sz = fz - Math.cos(yaw) * along - rz * side * 1.0;
           neons.push({ pos: [sx, 6 + R() * 8, sz], size: [1.2, 4 + R() * 3], yaw, color: col, text: words[Math.floor(R() * words.length)], vertical: true, flicker: R() < 0.2 ? 0.7 : 0, light: 16 });
         }
-        if (R() < 0.5) neons.push({ pos: [fx - rx * side * 0.25, 4.6 + R() * 1.5, fz - rz * side * 0.25], size: [Math.min(w - 2, 6), 1.2], yaw: fyaw, color: palette[Math.floor(R() * palette.length)], text: words[Math.floor(R() * words.length)], light: 0 });
+        if (R() < 0.5 && !isHoshi) neons.push({ pos: [fx - rx * side * 0.25, 4.6 + R() * 1.5, fz - rz * side * 0.25], size: [Math.min(w - 2, 6), 1.2], yaw: fyaw, color: palette[Math.floor(R() * palette.length)], text: words[Math.floor(R() * words.length)], light: 0 });
         // AC units + balconies up the facade
         for (let k = 0; k < 4; k++) {
           const y = 5 + R() * Math.max(2, h - 8); if (y > h - 1) continue;

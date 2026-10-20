@@ -152,7 +152,7 @@ function spawn(x: number, z: number, yaw: number, y = 1) { const s = createState
 // 8. job routes: the bot must finish each authored job inside its time limit (not trivial: uses > 35% of it)
 {
   const SW = buildStacks(); const qj = new RapierWorld(RAPIER); qj.addBoxes('j', SW.boxes);
-  const h = SW.anchors.hoshi!; const k: [number, number] = [h.pos[0] + Math.sin(h.yaw) * 4.5, h.pos[2] + Math.cos(h.yaw) * 4.5];
+  const h = SW.anchors.hoshi!; const k: [number, number] = [h.pos[0] + Math.sin(h.yaw) * 3.5 + Math.cos(h.yaw) * 10, h.pos[2] + Math.cos(h.yaw) * 3.5 - Math.sin(h.yaw) * 10];
   const bend = (await import('../src/world/slice')).streetPath(2).filter((p, i) => p.z < 0 && i % 4 === 0).map((p) => [p.x, p.z] as [number, number]);
   const routes: Record<string, { pts: [number, number][]; limit: number }> = {
     kiso_tram: { pts: [k, [0, k[1]], [0, 220], [-210, 220], [-210, 236]], limit: 34 },

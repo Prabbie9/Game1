@@ -49,7 +49,8 @@ export class Career {
   onTuning: (t: Tuning) => void = () => {};
   constructor(private scene: THREE.Scene, private world: WorldDef, private nav: NavUI, private ui: UI, private heat: HeatSystem, private audio: GameAudio, private baseTuning: Tuning) {
     const h = world.anchors.hoshi;
-    this.fixers = FIXERS.map((f) => f.id === 'kiso' && h ? { ...f, pos: [h.pos[0] + Math.sin(h.yaw) * 4.5, 0, h.pos[2] + Math.cos(h.yaw) * 4.5] as [number, number, number] } : f);
+    // Kiso waits on the pavement a few steps along from her door (the door itself is for walking in)
+    this.fixers = FIXERS.map((f) => f.id === 'kiso' && h ? { ...f, pos: [h.pos[0] + Math.sin(h.yaw) * 3.5 + Math.cos(h.yaw) * 10, 0, h.pos[2] + Math.cos(h.yaw) * 3.5 - Math.sin(h.yaw) * 10] as [number, number, number] } : f);
     for (const f of this.fixers) { const b = beam(f.color, 0.45, 22, 0.22); b.position.set(...f.pos); scene.add(b); this.markers.push(b); }
     this.objBeam = beam('#ffa142', 1.4, 160, 1.6); this.objBeam.visible = false; scene.add(this.objBeam);
     nav.blip = (p) => audio.blip(p);
@@ -125,7 +126,7 @@ export class Career {
     if (run.phase === 'idle' && !owns) {
       for (const f of this.fixers) {
         const d = Math.hypot(f.pos[0] - s.x, f.pos[2] - s.z);
-        if (d < 9 && Math.abs(f.pos[1] - s.y) < 4) {
+        if (d < 5.5 && Math.abs(f.pos[1] - s.y) < 4) {
           this.nearFixer = true;
           prompt = s.speed < 7 ? `<b>${glyph('interact')}</b>Talk to ${f.name}` : `Slow down to talk to ${f.name}`;
           if (s.speed < 7 && a.pressed.interact) {

@@ -8,7 +8,7 @@ const dir = single ? null : (args[0] ?? 'dist');
 const srv = dir ? await serve(dir, 8092) : null;
 const base = single ? 'file://' + fs.realpathSync(single) : 'http://localhost:8092/index.html';
 const b = await launch();
-const views = ['nosplash', 'bot=loop', ...['1', '2', '3', '4', '5', '6', '7'].map((s) => 'shot=' + s)];
+const views = ['nosplash', 'bot=loop', 'nosplash&job=dex_hound', ...['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].map((s) => 'shot=' + s)];
 let failed = 0;
 for (const v of views) {
   const t0 = Date.now();

@@ -79,3 +79,17 @@ Questions for a human (M4):
 3. Shaking the Hound: did breaking line of sight feel like a skill, and did the "hidden x / 6 s" counter help?
 4. In Lights Out, could you tell when a searchlight was about to catch you (warning bar, cone colour)? Did the 2 s grace feel fair?
 5. Are the rewards and the three upgrades worth chasing? Would you do another job right away?
+
+## M5 — Showpiece pass
+**Status: proxies PASS. UNPLAYED: needs human.**
+- On foot (`tools/foottest.mjs`): dismount with F when stopped; walk 2.6 m/s, sprint 6.2 m/s, jump apex ≈ 0.8 m; door prompt at Hoshi, interior entered and left via fade; remount by the bike. Bug found and fixed: the fall-respawn plane (y −40) kept lifting the player out of the hidden interior (y −60) → kill plane now −100.
+- Old Market route (Stacks → market lanes → Ring west ramp): 31.2 s, band 24–55 s, 0 dead-stops, 0 camera clips.
+- Lantern Run time trial: all 7 gates register in order, best run saved as a ghost and replayed on the next attempt.
+- Photo mode toggles cleanly; capture writes a PNG (download prompt when hosted).
+
+Questions for a human (M5):
+1. Did photo mode give you shots you'd actually keep? Which control was missing?
+2. Does the Old Market feel different enough from The Stacks to be worth visiting?
+3. Racing your own ghost in the Lantern Run: motivating or distracting?
+4. Getting off the bike and walking into Hoshi: charming, or pointless? Would you want more interiors?
+5. After an hour, what would make you come back tomorrow?

@@ -22,7 +22,7 @@ import { GameAudio } from './audio/audio';
 import { UI, loadSettings, loadingScreen, type Settings } from './ui/ui';
 import { Bot } from './bot/bot';
 import { Occlusion } from './heat/occlusion';
-import { HeatSystem } from './heat/heat';
+import { HeatSystem, Pursuer } from './heat/heat';
 import { NavUI } from './ui/nav';
 import { Career } from './jobs/career';
 import { JOBS } from './jobs/jobs';
@@ -108,12 +108,11 @@ async function boot() {
     capture: async () => { const png = await captureCanvas(game); await saveBlob(new Blob([png as BlobPart], { type: 'image/png' }), `night-courier-${Date.now()}.png`); },
     onExit: () => { physics.freeze(false); ui.setHudVisible(true); if (career) career.showMarkers = true; } });
   const applySettings = (s: Settings) => {
-    U.flicker.value = s.reduceFlicker ? 0 : 1;
+    U.flicker.value = s.reduceFlicker ? 0 : 1; Pursuer.steadyStrobes = s.reduceFlicker;
     audio.musicOn = s.music; audio.volume = s.volume; if (audio.master) audio.master.gain.value = s.volume;
     if (s.tier !== q.tier) ui.toast('QUALITY APPLIES ON RELOAD', 2.5);
+    if (!params.has('shot') && !params.has('time')) { setTime({ dusk: 19.8, night: 23.5, late: 3.0 }[s.tod] ?? 23.5); setRain({ storm: 1, rain: 0.75, drizzle: 0.35, clear: 0 }[s.weather] ?? 0.75); }
   };
-  applySettings(settings);
-
   // ---- state ----
   let simState: VehicleState = physics.cur ?? createState(0, 1, 0, 0);
   const cam = createChase(simState);
@@ -147,6 +146,7 @@ async function boot() {
   };
   const setRain = (r: number) => { rainAmt = r; U.rain.value = r; U.wet.value = Math.min(1, 0.35 + r); };
   setTime(+(params.get('time') ?? 23.5)); setRain(+(params.get('rain') ?? 1));
+  applySettings(settings);
 
   const game: Game = {
     renderer, scene, camera, post, world, physics, tuning, settings, backend, state: () => simState, bot,
@@ -171,6 +171,7 @@ async function boot() {
     heat: () => ({ heat: heat.heat, meter: heat.meter, spotted: heat.spotted, exposure: heat.exposure, covered: heat.covered, pursuers: heat.pursuers.map((p) => p.kind) }),
     stats: () => game.stats(),
     tuning: () => JSON.stringify(tuning),
+    foot: () => ({ onFoot, inside }),
   };
 
   // ---- loop ----
@@ -272,7 +273,7 @@ async function boot() {
       ? (Math.abs(simState.z - 90) < 10 && Math.abs(simState.x) < 80 && simState.y < 6) || (Math.abs(simState.z + 90) < 7 && Math.abs(simState.x) < 100 && simState.y < 8)
       : inside || (Math.abs(simState.x - 35) < 6 && simState.z < 62 && simState.z > -96 && simState.y < 8);
     const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd);
-    audio.update({ speed: simState.speed, boosting: simState.boosting, drifting: simState.drifting, slip: simState.slip, grounded: simState.grounded,
+    audio.update({ speed: onFoot ? 0 : simState.speed, boosting: simState.boosting, drifting: simState.drifting, slip: simState.slip, grounded: simState.grounded,
       onWater: simState.surface === 'water', rain: rainAmt, covered, cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z, fx: fwd.x, fz: fwd.z },
       tramAt: tram ? tram.pos : null,
       buzzAt: pool.lights[0] ? { x: pool.lights[0].position.x, y: pool.lights[0].position.y, z: pool.lights[0].position.z } : null });

@@ -234,7 +234,7 @@ export function stepVehicle(s: VehicleState, inp: VehicleInput, T: Tuning, q: Ph
   }
 
   // ---- fell out of the world → respawn at last safe spot ----
-  if (s.y < -40) teleport(s, s.safeX, s.safeY + 1, s.safeZ, s.safeYaw);
+  if (s.y < -100) teleport(s, s.safeX, s.safeY + 1, s.safeZ, s.safeYaw); // kill plane below the hidden interiors (y -60)
 
   const ffx = -Math.sin(s.yaw), ffz = -Math.cos(s.yaw);
   s.speed = Math.hypot(s.vx, s.vz);
@@ -265,6 +265,6 @@ export function stepFoot(s: VehicleState, inp: VehicleInput & { camYaw?: number 
   const res = q.moveAndSlide(s.x, s.y, s.z, s.vx * dt, s.vy * dt, s.vz * dt);
   s.x = res.x; s.y = res.y; s.z = res.z;
   for (const h of res.hits) { const vn = s.vx * h.nx + s.vy * h.ny + s.vz * h.nz; if (vn < 0) { s.vx -= h.nx * vn; s.vy -= h.ny * vn; s.vz -= h.nz * vn; } }
-  if (s.y < -80) teleport(s, s.safeX, s.safeY + 1, s.safeZ, s.safeYaw);
+  if (s.y < -100) teleport(s, s.safeX, s.safeY + 1, s.safeZ, s.safeYaw);
   s.speed = Math.hypot(s.vx, s.vz); s.fwdSpeed = s.speed; s.slip = 0; s.boosting = false; s.drifting = false;
 }
