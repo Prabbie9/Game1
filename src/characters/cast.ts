@@ -1,7 +1,7 @@
 // The named cast: the courier (seated on the bike with steering lean, or on foot with idle/walk/jog/sprint/jump
 // blends), the four fixers at their posts (talking idles) and Mama Kiso behind the Hoshi counter.
 import * as THREE from 'three/webgpu';
-import { Hero, OUTFITS, type HumanData } from './humans';
+import { Hero, LAYER, OUTFITS, type HumanData } from './humans';
 import type { VehicleState } from '../vehicle/sim';
 
 export class Cast {
@@ -48,6 +48,9 @@ export class Cast {
   setOnFoot(on: boolean) {
     if (on === this.onFoot) return;
     this.onFoot = on;
+    // helmet off on foot (face + hair), back on when riding
+    const hu = this.courier.mesh.userData.hu, H = (1 << LAYER.HELMET) | (1 << LAYER.VISOR), HAIR = 1 << LAYER.HAIR;
+    hu.mask = on ? (hu.mask & ~H) | HAIR : (hu.mask | H) & ~HAIR;
     if (on) { this.scene.add(this.courier.root); this.courier.root.rotation.set(0, 0, 0); this.courier.play('Idle_Loop', 0.15); }
     else { this.seat.add(this.courier.root); this.courier.root.position.set(0, 0, 0); this.courier.root.rotation.set(0, 0, 0); this.courier.play('Driving_Loop', 0.2); }
   }
@@ -90,7 +93,9 @@ export class Cast {
     if (best) {
       const r = best.root, fy = r.rotation.y; // light from in front of the face, above head height
       this.key.position.set(r.position.x + Math.sin(fy) * 1.3, r.position.y + 2.4, r.position.z + Math.cos(fy) * 1.3);
-      this.key.intensity = 9 * Math.max(0, 1 - Math.sqrt(bd) / 30);
+      const warm = best === this.kiso; // Kiso stands under the bar's lanterns: warm and softer
+      this.key.color.setHex(warm ? 0xffc890 : 0xcfe2ff);
+      this.key.intensity = (warm ? 4 : 9) * Math.max(0, 1 - Math.sqrt(bd) / 30);
     } else this.key.intensity = 0;
   }
 }

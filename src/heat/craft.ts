@@ -9,7 +9,7 @@ let K: ReturnType<typeof kit> | null = null;
 function kit() {
   const std = (c: number, r: number, m: number) => { const s = new THREE.MeshStandardNodeMaterial(); s.color = new THREE.Color(c); s.roughness = r; s.metalness = m; return s; };
   const M = {
-    hull: std(0x1a1d26, 0.3, 0.7), white: std(0x8d939e, 0.35, 0.5), dark: std(0x08090c, 0.6, 0.3), glass: std(0x061018, 0.05, 0.9),
+    hull: std(0x2a3040, 0.3, 0.7), ductGlow: glowMat(0xbfe6ff, 2.2), white: std(0x8d939e, 0.35, 0.5), dark: std(0x08090c, 0.6, 0.3), glass: std(0x061018, 0.05, 0.9),
     red: glowMat(0xff2040, 8), blue: glowMat(0x2050ff, 9), white8: glowMat(0xeaf6ff, 8),
     cyan: glowMat(0xbfe6ff, 6), mag: glowMat(0xff2aa8, 6), amber: glowMat(0xfff2c0, 6),
   };
@@ -63,7 +63,7 @@ export function buildCraft(kind: 'drone' | 'patrol' | 'hound' | 'sweeper') {
       const a = Math.PI / 4 + i * Math.PI / 2, x = Math.cos(a) * 1.0, z = Math.sin(a) * 1.0;
       add(G.box, M.dark, x / 2, 0.05, z / 2, 0.12, 0.06, 1.05, 0, -a + Math.PI / 2);
       add(G.duct, M.hull, x, 0.08, z, 1, 1, 1, Math.PI / 2);
-      add(G.duct, M.cyan, x, 0.13, z, 1.02, 1.02, 0.3, Math.PI / 2);
+      add(G.duct, M.ductGlow, x, 0.13, z, 1.02, 1.02, 0.3, Math.PI / 2);
       add(G.blade, M.dark, x, 0.1, z, 1, 1, 1, 0, i, 0, 'rotor');
     }
     add(G.lens, M.cyan, 0, -0.3, -0.12);

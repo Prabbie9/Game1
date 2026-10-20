@@ -82,7 +82,7 @@ export interface Outfit { name: string; layers: number[]; colors: Partial<Record
 const bit = (ls: number[]) => ls.reduce((m, l) => m | (1 << l), 0);
 export const OUTFITS: Record<string, Outfit> = {
   courier: { name: 'Courier', layers: [LAYER.SKIN, LAYER.SUIT, LAYER.JACKET, LAYER.HELMET, LAYER.VISOR, LAYER.TROUSERS, LAYER.BOOTS, LAYER.BAG],
-    colors: { [LAYER.SUIT]: 0x14151b, [LAYER.JACKET]: 0x1b1d26, [LAYER.HELMET]: 0x0c0d12, [LAYER.TROUSERS]: 0x17181f, [LAYER.BOOTS]: 0x0b0b0e, [LAYER.BAG]: 0x8a2a14 }, accent: 0xff2aa8, skin: 0xb07a5c },
+    colors: { [LAYER.SUIT]: 0x14151b, [LAYER.JACKET]: 0x1b1d26, [LAYER.HELMET]: 0x0c0d12, [LAYER.HAIR]: 0x16100c, [LAYER.TROUSERS]: 0x17181f, [LAYER.BOOTS]: 0x0b0b0e, [LAYER.BAG]: 0x8a2a14 }, accent: 0xff2aa8, skin: 0xb07a5c },
   kiso: { name: 'Mama Kiso', layers: [LAYER.SKIN, LAYER.SUIT, LAYER.HAIR, LAYER.APRON, LAYER.TROUSERS, LAYER.BOOTS],
     colors: { [LAYER.SUIT]: 0x5a1f2a, [LAYER.HAIR]: 0xb8b4ae, [LAYER.APRON]: 0xd8cdb8, [LAYER.TROUSERS]: 0x2a2420, [LAYER.BOOTS]: 0x141210 }, accent: 0xffa142, skin: 0xc9906c },
   dex: { name: 'Dex', layers: [LAYER.SKIN, LAYER.SUIT, LAYER.COAT, LAYER.HOOD, LAYER.TROUSERS, LAYER.BOOTS],

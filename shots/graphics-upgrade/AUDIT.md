@@ -34,3 +34,19 @@ Numbers at High (NRC_DEBUG.stats via tools/shots.mjs), SwiftShader, so timings a
 | 8 | 408 | 241,668 |
 | 9 | 344 | 338,110 |
 | 10 | 294 | 211,534 |
+
+## After (G1–G5)
+Sheets: `before_after_sheet.png` (shots 1–10, left = before, right = after), `after_sheet.png`, and `after_extras_sheet.png` (rider, Dex, bike side, street furniture and crowd, junction, on foot, noodle bar, tram, drone).
+
+| # | Weakness | Status |
+|---|---|---|
+| 1 | No real people | Fixed: skinned Quaternius humans with clothing; crowd LOD ladder; animated Kiso and fixers |
+| 2 | Capsule rider | Fixed: skinned rider seated with lean and tuck; helmet comes off on foot |
+| 3 | Box bike | Fixed: modelled hull with animated vanes, flaps and thrusters |
+| 4 | Flat facades | Improved: interior-mapped windows, mullions, relief, cornices, fire escapes and drains. Still boxes underneath |
+| 5 | Bare sidewalks | Fixed: furniture on every street-facing wall, colliders in sync |
+| 6 | One box car | Fixed: three silhouettes |
+| 7 | Pursuit craft | Fixed: modelled cruiser, drone, hound and sweeper |
+| 8 | Tram, tower, Skyway | Improved: modelled tram, Wan crown and spire, Skyway girders and gantries |
+| 9 | No ground detail | Improved: decals (lane paint, zebras, dry patches, cracks, manholes, posters). No downloaded PBR textures (hosts blocked) |
+| 10 | Over-bloomed Hoshi | Improved: toned lanterns, lathed stools, bowls and jars, Kiso present |

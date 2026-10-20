@@ -232,10 +232,11 @@ async function boot() {
     setTime, setRain,
     startJob: (id: string) => { const j = JOBS.find((x) => x.id === id); if (!j || !career) return 'unknown job: ' + JOBS.map((x) => x.id).join(', '); career.startJob(j); return 'started ' + id; },
     setHeat: (h: number) => { heat.setHeat(h); return heat.heat; },
-    heat: () => ({ heat: heat.heat, meter: heat.meter, spotted: heat.spotted, exposure: heat.exposure, covered: heat.covered, pursuers: heat.pursuers.map((p) => p.kind) }),
+    heat: () => ({ heat: heat.heat, meter: heat.meter, spotted: heat.spotted, exposure: heat.exposure, covered: heat.covered, pursuers: heat.pursuers.map((p) => p.kind), at: heat.pursuers.map((p) => [p.pos.x, p.pos.y, p.pos.z]) }),
     stats: () => game.stats(),
     tuning: () => JSON.stringify(tuning),
     foot: () => ({ onFoot, inside }),
+    tram: () => (tram ? { x: tram.pos.x, y: tram.pos.y, z: tram.pos.z } : null),
   };
 
   // ---- loop ----

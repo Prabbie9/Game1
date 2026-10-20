@@ -213,7 +213,7 @@ export class HumanCrowd {
         const ff = (p.clipT / ci.dur) * ci.len, f0 = Math.floor(ff) % ci.len, f1 = (f0 + 1) % ci.len;
         mA.set([p.x, p.y, p.z, p.yaw], mi * 4); mB.set([ci.start + f0, ci.start + f1, ff - Math.floor(ff), p.variant * 16 + p.pal], mi * 4); mi++;
       } else if (fi < max) { fA.set([p.x, p.y, p.z, Math.atan2(cx - p.x, cz - p.z)], fi * 4); fi++; }
-      if (p.umb && ui < max && p.d > 2) { uA.set([p.x, p.y, p.z, p.yaw], ui * 4); ui++; }
+      if (p.umb && ui < max && p.d > 4) { /* no umbrella domes filling the lens */ uA.set([p.x, p.y, p.z, p.yaw], ui * 4); ui++; }
     }
     // nearest N become full heroes; overflow drops to the VAT tier
     near.sort((a, b) => a.d - b.d);

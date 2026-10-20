@@ -1,10 +1,10 @@
 # PROGRESS
-NEXT STEP: Graphics upgrade (branch claude/loving-cerf-mml2vq): verify G1–G3 at High (shots/g3h_*), fix defects, smoke + single-file checkpoint G1–G3, then G4 decals check, G5 polish, FINAL REPORT update.
+NEXT STEP: Graphics upgrade G1–G5 done (branch claude/loving-cerf-mml2vq, builds/G5-checkpoint). Await a real-hardware fps report at High (pause → Save reference shots → stats.json); then drop CC0 GLB/PBR files into assets/ (assets/WANTED.md).
 
 PLAYABLE BUILD: M5 final — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/ (= M5).
 
 ## Done
-- Graphics upgrade (in progress): G1 skinned humans (Quaternius UAL, CC0) + cast + VAT crowd; G2 hero bike hull, 3 car silhouettes, tram, pursuit craft; G3 street furniture with collider sync, fire escapes, interior-mapped windows, cornices, Wan Tower crown, Skyway detail; G4 decals + Rajdhani font + GLB drop-in loader. Audit: shots/graphics-upgrade/AUDIT.md.
+- Graphics upgrade (G1–G5 complete; checkpoints builds/G3-checkpoint, builds/G5-checkpoint): G1 skinned humans (Quaternius UAL, CC0) + cast + VAT crowd; G2 hero bike hull, 3 car silhouettes, tram, pursuit craft; G3 street furniture with collider sync, fire escapes, interior-mapped windows, cornices, Wan Tower crown, Skyway detail; G4 decals + Rajdhani font + GLB drop-in loader. Audit: shots/graphics-upgrade/AUDIT.md.
 - M5: showpiece (photo mode, Old Market, ghosts, time trial, on-foot + noodle bar); checkpoint builds/M5-checkpoint; FINAL REPORT.md written.
 - M4: core loop (jobs, heat, HUD, map, upgrades, save); checkpoint builds/M4-checkpoint.
 - M3: Stacks zone + streaming, crowds, traffic, tram; checkpoint builds/M3-checkpoint.

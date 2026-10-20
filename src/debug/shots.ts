@@ -38,6 +38,7 @@ export const SLICE_SHOTS: Record<string, ShotDef> = {
   '11': { title: 'Rider close-up (extra)', time: 23.6, cam: { pos: [2.4, 1.7, 97.2], look: [0, 1.1, 100.2], fov: 45 }, bike: { pos: [0, 1, 100], yaw: 0 }, warm: 30 },
   '13': { title: 'Bike side profile (extra)', time: 23.6, cam: { pos: [3.4, 1.35, 100.1], look: [0, 1.05, 100.1], fov: 40 }, bike: { pos: [0, 1, 100], yaw: 0 }, warm: 30 },
   '14': { title: 'Procedural street: furniture + crowd (extra)', time: 23.6, cam: { pos: [-212.5, 1.8, 166], look: [-219, 1.2, 148], fov: 55 }, bike: { pos: [-205, 1, 175], yaw: 0 }, warm: 40 },
+  '15': { title: 'Tram on the elevated line (extra)', time: 23.6, cam: { pos: [14, 11.5, 236], look: [0, 9, 220], fov: 50 }, bike: { pos: [0, 1, 200], yaw: 0 }, warm: 40 },
   '12': { title: 'Fixer close-up: Dex (extra)', time: 23.6, cam: { pos: [287.2, 1.75, -48.6], look: [291.6, 1.25, -50], fov: 42 }, bike: { pos: [284, 1, -44], yaw: 0.6 }, warm: 30 },
   '8': { title: 'Stacks street life (extra)', time: 23.6, cam: { pos: [-121, 2.2, 228], look: [-60, 6, 214], fov: 55 }, bike: { pos: [-112, 1, 222], yaw: -Math.PI / 2 }, warm: 30 },
 };

@@ -95,7 +95,7 @@ export function facade(variant: 'panel' | 'brick') {
   // mullions (2 or 3 panes) + a transom bar: breaks the "lit square" read at every distance
   const wu = fu.sub(mU).div(float(1).sub(mU.mul(2))), wv = fv.sub(0.33).div(0.42);
   const panes = mix(float(2), float(3), step(0.5, fract(bw.mul(7.0))));
-  const mull = smoothstep(0.44, 0.47, abs(fract(wu.mul(panes)).sub(0.5))).max(smoothstep(0.025, 0.012, abs(wv.sub(0.74))));
+  const mull = smoothstep(0.41, 0.45, abs(fract(wu.mul(panes)).sub(0.5))).max(smoothstep(0.04, 0.02, abs(wv.sub(0.74))));
   const groundFloor = step(y, float(4.2));
   const isWin0 = winU.mul(winV).mul(vertical).mul(float(1).sub(groundFloor));
   const isWin = isWin0.mul(float(1).sub(mull.mul(0.85)));

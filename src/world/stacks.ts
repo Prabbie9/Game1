@@ -166,6 +166,8 @@ export function buildStacks(): StacksWorld {
   for (const x of [-240, -60, 156]) for (const [z, yaw] of [[TRAM.z - CORR, 0], [TRAM.z + CORR, Math.PI]] as [number, number][]) {
     props.push({ kind: 'tramstop', pos: [x, 0.15, z], yaw, size: [5, 0, 0], seed: RF() * 100 });
     solidProp(boxes, x, 0.15, z, yaw, 0, 0.45, 0.35, 2.3, 0.45, 0.35);
+    // bollards guarding the shelter ends
+    for (const e of [-3.2, 3.2]) { const bx = x + Math.cos(yaw) * e + Math.sin(yaw) * 0.6, bz = z - Math.sin(yaw) * e + Math.cos(yaw) * 0.6; props.push({ kind: 'bollard', pos: [bx, 0.15, bz], yaw, size: [0, 0, 0] }); solidProp(boxes, bx, 0.15, bz, yaw, 0, 0.45, 0, 0.11, 0.45, 0.11); }
   }
 
   // ---- the Ring: elevated lane along z = -230 at +12 m ----

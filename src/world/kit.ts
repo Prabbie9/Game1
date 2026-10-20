@@ -142,6 +142,8 @@ function decalMat() {
   // dry patches and cracks stay rough (no reflections), paint and posters get a wet sheen, metal covers glint
   m.roughnessNode = clamp(float(0.4).sub(U.wet.mul(0.25)).add(is(4).mul(0.6)).add(is(5).mul(0.5)).add(is(7).mul(-0.1)), 0.06, 1);
   m.metalnessNode = is(7).mul(0.7);
+  // road paint is retroreflective: a faint glow keeps lane dashes readable at speed in the dark
+  m.emissiveNode = paintCol.mul(is(0).add(is(1)).add(is(2))).mul(0.06);
   return m;
 }
 /** Yellow/black chevrons (barriers, bollard bands). */
