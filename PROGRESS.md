@@ -61,7 +61,7 @@ PLAYABLE BUILD: M5 final — hosted https://claude.ai/artifact/57iTMnatcL6jW9Gvc
 - Vehicle sim runs entirely inside the physics worker (fixed 120 Hz); main thread renders interpolated state. The same sim module runs in Node for bot fun-gate tests.
 - Route B primary, Route A mirror (see DESIGN.md).
 - Asset sites blocked → procedural textures/geometry/audio; Google Fonts reachable (fonts embedded at build time if used).
-- GitHub push returns 403 (Claude GitHub App has no access to Prabbie9/Game1) → commits stay local; delivery via Artifact. Retry push at milestone ends.
+- GitHub push was refused (403) until access was connected; now pushed to origin/claude/stoic-clarke-cvo2qy.
 - ACES filmic tone mapping (AgX looked washed out against the deep blue-black palette).
 - SSR reflectivity = max(metalness, smoothness × grazing fresnel) written into the MRT (three's SSR otherwise only reflects metals).
 - Renderer default = WebGL2 (tested); WebGPU opt-in via Settings/`?backend=webgpu` with fallback (headless WebGPU run crashed; untested).

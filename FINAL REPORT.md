@@ -92,5 +92,5 @@ See PLAYTEST.md for the full list per milestone. The five that matter most:
 5. Real fps on your machine at High, and any stutters while crossing the district?
 
 ## Process notes
-- GitHub push from the build environment returned 403 (the Claude GitHub App lacks access to `Prabbie9/Game1`); all work is committed locally on branch `claude/stoic-clarke-cvo2qy`. Install the app / reconnect GitHub and push from a new session to publish the history.
+- All work is pushed to GitHub on branch `claude/stoic-clarke-cvo2qy` (https://github.com/Prabbie9/Game1/tree/claude/stoic-clarke-cvo2qy). Early pushes were refused (403) until GitHub access was connected.
 - Tooling: `npm run smoke` (headless smoke test of every shot), `npx tsx tools/fungate.ts [preset]` (bot proxies), `node tools/stability.mjs` (frame-time drive), `node tools/jobtest.mjs`, `node tools/foottest.mjs`, `npx tsx tools/fairness.ts`, `node tools/shots.mjs dist <prefix> shot=1 …`.
