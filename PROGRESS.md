@@ -1,5 +1,5 @@
 # PROGRESS
-NEXT STEP: Polish pass (budget remaining): optional — profile High tier draw calls, tighten Old Market lighting; otherwise DONE. Read FINAL REPORT.md.
+NEXT STEP: DONE (M0–M5 complete). Await human playtest feedback; then tune from "Copy my settings" numbers and reported fps. See FINAL REPORT.md.
 
 PLAYABLE BUILD: M5 final — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/ (= M5).
 
