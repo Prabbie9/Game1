@@ -1,5 +1,5 @@
 # PROGRESS
-NEXT STEP: M1: scaffold src/ (main.ts, renderer, input, vehicle sim in physics worker, camera, tuning panel) and grey-box test area; get first frame headless.
+NEXT STEP: M1: verify full post chain renders headless (shots/r2_*), fix defects, run smoke, then M1 gates + checkpoint.
 
 PLAYABLE BUILD: (none yet) — M0 delivery test hosted at https://claude.ai/artifact/TYkkpPLG9FAVQ7KoYsEeNp
 

@@ -26,6 +26,7 @@ export interface Tuning {
   driftMinSpeed: number;   // m/s
   driftGrip: number;       // 1/s lateral decay while drifting
   driftSteer: number;      // rad/s yaw rate while drifting
+  driftMaxAngle: number;  // rad, max slip angle held in a drift
   driftCharge: number;     // boost meter gained per second of full drift
   driftKick: number;       // m/s burst on drift release (scaled by charge)
   // hover + hop

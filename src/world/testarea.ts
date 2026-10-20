@@ -104,12 +104,12 @@ export function buildTestArea(): WorldDef {
   const words = ['NOODLE', 'HOTEL', '24H', 'PACHINKO', 'KARAOKE', 'RAMEN', 'CLINIC', 'BAR', 'DATA', 'SUSHI', 'CYBER', 'LOANS'];
   for (let x = -170, n = 0; x <= 170; x += 17, n++) {
     const north = n % 2 === 0;
-    const z = north ? 180 - hw - 2 - 0.2 : 180 + hw + 2 + 0.2;
+    const z = north ? 180 - hw - 2 + 0.2 : 180 + hw + 2 - 0.2;
     const vertical = R() < 0.45;
     const col = palette[n % palette.length];
     neons.push({
       pos: [x + R() * 4 - 2, vertical ? 7 + R() * 3 : 4.2 + R() * 4, z], size: vertical ? [1.4, 5.5] : [6 + R() * 3, 1.5],
-      yaw: north ? Math.PI : 0, color: col, text: words[n % words.length], vertical, flicker: R() < 0.2 ? 0.6 : 0, light: 18,
+      yaw: north ? 0 : Math.PI, color: col, text: words[n % words.length], vertical, flicker: R() < 0.2 ? 0.6 : 0, light: 18,
     });
   }
   for (let x = -165; x <= 165; x += 30) {
