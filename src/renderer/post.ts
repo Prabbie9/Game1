@@ -52,9 +52,11 @@ const lensDrops = Fn(([img, wet]: any[]) => {
 export class Post {
   pipeline: THREE.RenderPipeline;
   stages: string[] = [];
+  private scenePass: any;
   constructor(renderer: THREE.WebGPURenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, pq: PostQuality) {
     this.pipeline = new THREE.RenderPipeline(renderer);
     const scenePass = pass(scene, camera);
+    this.scenePass = scenePass;
     const needMRT = pq.ssr || pq.ao || pq.traa || pq.motionBlur;
     if (needMRT) {
       // SSR weights reflections by the first channel, so write a reflectivity term instead of raw metalness:
@@ -116,6 +118,13 @@ export class Post {
     const r = length(screenUV.sub(0.5));
     const vig = float(1).sub(smoothstep(0.35, 0.95, r).mul(POST.vignette));
     this.pipeline.outputNode = film(vec4(img.rgb.mul(vig).mul(POST.exposure), 1), POST.grain);
+  }
+  /** Compile the scene's programs against the scene pass's MRT target without blocking the main thread (uses KHR_parallel_shader_compile). */
+  async compile(renderer: THREE.WebGPURenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, onProgress?: (done: number, total: number) => void) {
+    const prevRT = renderer.getRenderTarget(), prevMRT = renderer.getMRT();
+    renderer.setRenderTarget(this.scenePass.renderTarget); renderer.setMRT(this.scenePass.getMRT());
+    try { await renderer.compileAsync(scene, camera, null, onProgress as any); }
+    finally { renderer.setRenderTarget(prevRT); renderer.setMRT(prevMRT); }
   }
   render() { this.pipeline.render(); }
 }

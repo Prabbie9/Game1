@@ -209,8 +209,9 @@ export function loadingScreen() {
   el.innerHTML = `<div class="t">NIGHT <span>COURIER</span></div><div class="s">LOADING THE DISTRICT</div>`;
   document.body.appendChild(el);
   return {
+    status(msg: string) { (el.querySelector('.s') as HTMLElement).textContent = msg; },
     ready(onGo: () => void, auto: boolean) {
-      (el.querySelector('.s') as HTMLElement).textContent = 'RAIN-SOAKED. NEON-LIT. ON TIME.';
+      const sub = el.querySelector('.s') as HTMLElement; if (!/GPU ACCELERATION/.test(sub.textContent || '')) sub.textContent = 'RAIN-SOAKED. NEON-LIT. ON TIME.';
       const go = document.createElement('div'); go.className = 'go'; go.textContent = 'CLICK OR PRESS ANY KEY TO RIDE'; el.appendChild(go);
       const start = () => { window.removeEventListener('keydown', start); el.removeEventListener('click', start); el.style.opacity = '0'; setTimeout(() => el.remove(), 900); onGo(); };
       if (auto) { el.remove(); onGo(); return; }

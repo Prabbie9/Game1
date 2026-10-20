@@ -19,7 +19,7 @@ import { BikeModel } from './vehicle/bikeModel';
 import { createChase, updateChase } from './camera/chase';
 import { Rain } from './fx/rain';
 import { GameAudio } from './audio/audio';
-import { UI, loadSettings, loadingScreen, type Settings } from './ui/ui';
+import { UI, loadSettings, saveSettings, loadingScreen, type Settings } from './ui/ui';
 import { Bot } from './bot/bot';
 import { Occlusion } from './heat/occlusion';
 import { HeatSystem, Pursuer } from './heat/heat';
@@ -44,9 +44,17 @@ export interface Game {
   stats: () => any; backend: string; frameCount: () => number; renderFrame: () => void; hud: (v: boolean) => void;
 }
 
+// let the browser paint (and stay responsive) between the heavy synchronous boot steps
+const tick = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+
 async function boot() {
   const load = loadingScreen();
+  await tick();
   const settings = loadSettings();
+  // software rasteriser (no GPU acceleration): this renderer cannot run on it, start on Low and say why
+  const softwareGL = (() => { try { const g = document.createElement('canvas').getContext('webgl2'); const e = g?.getExtension('WEBGL_debug_renderer_info');
+    return !g || /swiftshader|llvmpipe|software|basic render/i.test(String(e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : '')); } catch { return false; } })();
+  if (softwareGL && !params.has('quality')) settings.tier = 'low';
   const tierParam = params.get('quality') as Settings['tier'] | null;
   if (tierParam && TIERS[tierParam]) settings.tier = tierParam;
   const q = { ...TIERS[settings.tier], post: { ...TIERS[settings.tier].post } };
@@ -58,6 +66,7 @@ async function boot() {
   try { made = await createRenderer(document.body, !wantGPU); }
   catch (e) { console.warn('WebGPU init failed, using WebGL2', e); document.querySelector('canvas')?.remove(); made = await createRenderer(document.body, true); }
   const { renderer, backend } = made;
+  load.status('BUILDING THE DISTRICT'); await tick();
   const W = params.get('w') ? +params.get('w')! : innerWidth, H = params.get('h') ? +params.get('h')! : innerHeight;
   renderer.setSize(W, H, !params.get('w'));
   renderer.setPixelRatio(q.renderScale * Math.min(1.5, devicePixelRatio || 1));
@@ -68,6 +77,7 @@ async function boot() {
   const worldName = params.get('world') ?? 'stacks';
   const world: WorldDef = worldName === 'test' ? buildTestArea() : worldName === 'slice' ? buildSlice() : buildStacks();
   (window as any).__NC_WORLD = worldName;
+  await tick();
   const atmo = new Atmosphere(scene, renderer, q.shadows);
   const tuning: Tuning = cloneTuning(PRESETS[settings.preset] ?? BALANCED);
   const physics = new PhysicsClient();
@@ -75,6 +85,7 @@ async function boot() {
   const streamer = new ChunkStreamer(scene, world as SliceWorld, makeMaterials(), physics);
   await physics.init(streamer.initialPhysics(world.spawn.pos[0], world.spawn.pos[2]), world.spawn.pos, world.spawn.yaw, tuning);
   streamer.update(new THREE.Vector3(...world.spawn.pos), new THREE.Vector3(...world.spawn.pos), true);
+  load.status('POPULATING THE STREETS'); await tick();
   const dressing = (world as SliceWorld).dressing;
   if (dressing) scene.add(buildHolos(dressing.holos));
   const SW = world as StacksWorld;
@@ -298,8 +309,22 @@ async function boot() {
     if (!(window as any).__NC_MANUAL) requestAnimationFrame(frame);
   };
 
+  // compile shaders in parallel in the background (progress shown), then warm the first frame behind the loading screen
+  load.status('COMPILING SHADERS'); await tick();
+  try { await post.compile(renderer, scene, camera, (d, n) => load.status(`COMPILING SHADERS ${d}/${n}`)); } catch (e) { console.warn('shader precompile failed', e); }
+  load.status('WARMING UP'); await tick();
+  const T1 = performance.now(); post.render(); await tick(); post.render(); await tick();
+  const warmMs = performance.now() - T1;
+  // a machine that needs seconds for two frames cannot run this tier: fall back to Low once and reload (guarded against loops)
+  let slowNote = '';
+  if (warmMs > 6000 && settings.tier !== 'low' && !params.has('quality')) {
+    let tried = false; try { tried = sessionStorage.getItem('nc.autolow') === '1'; sessionStorage.setItem('nc.autolow', '1'); } catch { /* ignore */ }
+    if (!tried) { settings.tier = 'low'; saveSettings(settings); load.status('SLOW GRAPHICS DETECTED — SWITCHING TO LOW QUALITY'); setTimeout(() => location.reload(), 600); return; }
+  }
+  if (softwareGL || warmMs > 6000) slowNote = 'NO GPU ACCELERATION DETECTED — turn on "Use graphics acceleration" in your browser settings, then reload';
   const shot = params.get('shot');
   const auto = !!shot || params.has('nosplash') || !!botName;
+  if (slowNote) { load.status(slowNote); await tick(); }
   load.ready(() => { audio.start(); applySettings(settings); }, auto);
   requestAnimationFrame(frame);
   (window as any).__NC_READY = true;
