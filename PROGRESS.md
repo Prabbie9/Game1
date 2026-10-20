@@ -64,6 +64,7 @@ PLAYABLE BUILD: M5 final — hosted https://claude.ai/artifact/57iTMnatcL6jW9Gvc
 - GitHub push returns 403 (Claude GitHub App has no access to Prabbie9/Game1) → commits stay local; delivery via Artifact. Retry push at milestone ends.
 - ACES filmic tone mapping (AgX looked washed out against the deep blue-black palette).
 - SSR reflectivity = max(metalness, smoothness × grazing fresnel) written into the MRT (three's SSR otherwise only reflects metals).
+- Renderer default = WebGL2 (tested); WebGPU opt-in via Settings/`?backend=webgpu` with fallback (headless WebGPU run crashed; untested).
 - Headless captures: 960×540, SwiftShader ≈ 10 fps; motion shots therefore show more temporal ghosting than a real GPU.
 
 ## Assets

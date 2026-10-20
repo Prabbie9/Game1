@@ -52,8 +52,12 @@ async function boot() {
   const q = { ...TIERS[settings.tier], post: { ...TIERS[settings.tier].post } };
   // ?post=ssr,ao,... overrides the tier's post stages (debug / capture)
   if (params.has('post')) { const on = params.get('post')!.split(','); for (const k of Object.keys(q.post)) (q.post as any)[k] = on.includes(k); }
-  const forceWebGL = params.get('backend') === 'webgl' || !(navigator as any).gpu;
-  const { renderer, backend } = await createRenderer(document.body, forceWebGL);
+  // WebGL2 is the tested default; WebGPU is opt-in (Settings → Renderer, or ?backend=webgpu) and falls back on failure
+  const wantGPU = (params.get('backend') === 'webgpu' || (settings.renderer === 'webgpu' && params.get('backend') !== 'webgl')) && !!(navigator as any).gpu;
+  let made;
+  try { made = await createRenderer(document.body, !wantGPU); }
+  catch (e) { console.warn('WebGPU init failed, using WebGL2', e); document.querySelector('canvas')?.remove(); made = await createRenderer(document.body, true); }
+  const { renderer, backend } = made;
   const W = params.get('w') ? +params.get('w')! : innerWidth, H = params.get('h') ? +params.get('h')! : innerHeight;
   renderer.setSize(W, H, !params.get('w'));
   renderer.setPixelRatio(q.renderScale * Math.min(1.5, devicePixelRatio || 1));
@@ -110,7 +114,7 @@ async function boot() {
   const applySettings = (s: Settings) => {
     U.flicker.value = s.reduceFlicker ? 0 : 1; Pursuer.steadyStrobes = s.reduceFlicker;
     audio.musicOn = s.music; audio.volume = s.volume; if (audio.master) audio.master.gain.value = s.volume;
-    if (s.tier !== q.tier) ui.toast('QUALITY APPLIES ON RELOAD', 2.5);
+    if (s.tier !== q.tier || (s.renderer === 'webgpu') !== (backend === 'WebGPU')) ui.toast('APPLIES ON RELOAD', 2.5);
     if (!params.has('shot') && !params.has('time')) { setTime({ dusk: 19.8, night: 23.5, late: 3.0 }[s.tod] ?? 23.5); setRain({ storm: 1, rain: 0.75, drizzle: 0.35, clear: 0 }[s.weather] ?? 0.75); }
   };
   // ---- state ----

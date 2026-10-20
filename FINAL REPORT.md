@@ -6,7 +6,7 @@ A compact open-district cyberpunk hover-bike courier game for desktop browsers. 
 - **Offline, one file:** `builds/play/NightCourier.html` — download and double-click. Works from `file://` (worker as blob URL, Rapier WASM inlined). ~5.5 MB.
 - **Hosted:** https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV (private to you; share it from the page's Share menu). "Save reference shots" uses the viewer's download prompt there.
 - Checkpoints: `builds/M1-checkpoint` … `builds/M5-checkpoint`; last known-good build in `builds/known-good/`.
-- Browser: Chrome/Edge recommended. It uses WebGPU when available, otherwise WebGL2 automatically. Add `?backend=webgl` to force WebGL2.
+- Browser: Chrome/Edge recommended. It runs on **WebGL2 by default** (the only backend tested). WebGPU is opt-in: Esc → Settings → Renderer → webgpu (reload), or `?backend=webgpu`; if WebGPU fails to start it falls back to WebGL2.
 
 ## Controls (keyboard + mouse)
 | Key | Action |
@@ -62,7 +62,7 @@ URL params for testing: `?quality=low|medium|high`, `?shot=1..10`, `?world=stack
 
 ## Needs real-hardware testing (cannot be verified here)
 - **Real fps:** all frame times were measured on SwiftShader (software). Targets: High = 60 fps on Ryzen 7 7800X3D + RX 7800 XT. Unverified until you report numbers (pause → Save reference shots writes a `stats.json` with draw calls, triangles and frame times from your GPU).
-- **WebGPU backend:** only WebGL2 was exercised; WebGPU is used automatically on supported browsers and is UNTESTED.
+- **WebGPU backend:** only WebGL2 was exercised. A headless WebGPU (SwiftShader) run crashed the browser from memory pressure, so WebGPU is opt-in and UNTESTED — please try Settings → Renderer → webgpu and report.
 - **Feel:** I cannot feel the handling. Proxies say: 0 → cruise in 2.0 s, boost 34–36 m/s, ≥ 62 % speed kept on a head-on wall hit, camera never clips. Whether it is *fun* is for you to say.
 - Hosted Artifact runtime (claude.ai sandbox: WASM + workers + WebGPU) could not be opened headless.
 - Volumetric ray-marched fog (`VolumeNodeMaterial`) exists in three r186 but is not enabled; light shafts are fakes. UNVERIFIED on GPU.
