@@ -17,6 +17,8 @@ export class GameAudio {
   private boostL!: { o: OscillatorNode; g: GainNode };
   private water!: { g: GainNode };
   private buzz!: { p: PannerNode; g: GainNode };
+  private city!: { f: BiquadFilterNode; g: GainNode };
+  private nextSiren = 0;
   private nextBeat = 0; private step = 0;
   musicOn = true; volume = 0.8;
 
@@ -58,6 +60,9 @@ export class GameAudio {
     const bzf = ctx.createBiquadFilter(); bzf.type = 'lowpass'; bzf.frequency.value = 900;
     bzg.connect(bzf).connect(p).connect(this.sfx);
     this.buzz = { p, g: bzg };
+    // distant city: low traffic rumble (always on, ducks under cover)
+    this.city = this.noiseVoice('lowpass', 160, 0.5);
+    this.nextSiren = ctx.currentTime + 8;
     this.nextBeat = ctx.currentTime + 0.2;
   }
 
@@ -88,7 +93,21 @@ export class GameAudio {
     const L = ctx.listener as any;
     if (L.positionX) { L.positionX.value = a.cam.x; L.positionY.value = a.cam.y; L.positionZ.value = a.cam.z; L.forwardX.value = a.cam.fx; L.forwardY.value = 0; L.forwardZ.value = a.cam.fz; }
     if (a.buzzAt) { const p = this.buzz.p as any; p.positionX.value = a.buzzAt.x; p.positionY.value = a.buzzAt.y; p.positionZ.value = a.buzzAt.z; }
+    this.set(this.city.g.gain, a.covered ? 0.05 : 0.09, 1.0);
+    // a far siren or hover-traffic swell now and then, panned somewhere in the city
+    if (ctx.currentTime > this.nextSiren) { this.distant(); this.nextSiren = ctx.currentTime + 14 + Math.random() * 20; }
     this.music();
+  }
+
+  private distant() {
+    const ctx = this.ctx!; const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    const base = 600 + Math.random() * 300;
+    for (let i = 0; i < 6; i++) { o.frequency.setValueAtTime(base, t + i * 0.9); o.frequency.linearRampToValueAtTime(base * 1.3, t + i * 0.9 + 0.45); }
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1200;
+    const pan = ctx.createStereoPanner(); pan.pan.value = Math.random() * 2 - 1;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.012, t + 1.5); g.gain.linearRampToValueAtTime(0.0001, t + 5.4);
+    o.connect(f).connect(pan).connect(g).connect(this.sfx); o.start(t); o.stop(t + 5.5);
   }
 
   /** One-shot: boost surge. */

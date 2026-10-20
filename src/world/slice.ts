@@ -33,14 +33,15 @@ export function streetPath(step = 2): { x: number; z: number; yaw: number; s: nu
   return pts;
 }
 
-export function buildSlice(): SliceWorld {
+export function buildSlice(opts: { embed?: boolean } = {}): SliceWorld {
   const R = rng(7);
   const boxes: BoxDef[] = [], neons: NeonDef[] = [], lights: LightDef[] = [];
   const props: PropDef[] = [], cables: CableDef[] = [], steam: SteamDef[] = [], holos: HoloDef[] = [];
   const path = streetPath(2);
+  let hoshiAt: { pos: [number, number, number]; yaw: number } | null = null;
 
   // ---- ground (cut around the canal) ----
-  const G = { x0: -90, x1: 130, z0: -190, z1: 150 };
+  const G = opts.embed ? { x0: -360, x1: 360, z0: -360, z1: 360 } : { x0: -90, x1: 130, z0: -190, z1: 150 };
   boxes.push(box(G.x0, -2, G.z0, CANAL2.x0, 0, G.z1, 'asphalt', { collide: 'ground', surface: 'asphalt' }));
   boxes.push(box(CANAL2.x1, -2, G.z0, G.x1, 0, G.z1, 'asphalt', { collide: 'ground', surface: 'asphalt' }));
   boxes.push(box(CANAL2.x0, -2, G.z0, CANAL2.x1, 0, CANAL2.z0, 'asphalt', { collide: 'ground', surface: 'asphalt' }));
@@ -95,16 +96,16 @@ export function buildSlice(): SliceWorld {
         boxes.push(obox(bx, bz, yaw, depth, h, w, R() < 0.55 ? 'facade' : 'facadeB', 0, { lit: 0.2 + R() * 0.35, seed, surface: 'brick' }));
         // ground-floor dressing on the street face
         const fx = cx0 + rx * side * (ROAD_HW + WALK) , fz = cz0 + rz * side * (ROAD_HW + WALK);
-        const faceYaw = yaw + (side === 1 ? Math.PI / 2 : -Math.PI / 2) + Math.PI; // facing the road
-        const fyaw = side === 1 ? yaw + Math.PI / 2 : yaw - Math.PI / 2;
+        const fyaw = side === 1 ? yaw - Math.PI / 2 : yaw + Math.PI / 2; // plane normal points at the road
         const kind = R();
-        const isHoshi = side === -1 && p.z < 66 && p.z > 52;
+        const isHoshi = side === -1 && p.z < 70 && p.z > 50;
         const ox = -rx * side * 0.05, oz = -rz * side * 0.05;
-        if (isHoshi) {
+        if (isHoshi && !hoshiAt) {
+          hoshiAt = { pos: [fx, 1.9, fz], yaw: fyaw };
           props.push({ kind: 'warmwin', pos: [fx + ox, 1.9, fz + oz], yaw: fyaw, size: [w - 1.5, 2.8, 0] });
           props.push({ kind: 'awning', pos: [fx + ox, 3.6, fz + oz], yaw: fyaw, size: [w - 0.6, 0, 1.8], seed: 0.1 });
           for (const t of [-1, 1]) props.push({ kind: 'lantern', pos: [fx + rx * side * -0.9 + Math.sin(yaw) * t * (w / 2 - 1.2) * -1, 3.1, fz + rz * side * -0.9 + Math.cos(yaw) * t * (w / 2 - 1.2) * -1], yaw: 0, size: [0.32, 0, 0] });
-          neons.push({ pos: [fx - rx * side * 1.2, 6.0, fz - rz * side * 1.2], size: [1.3, 4.6], yaw: yaw + Math.PI / 2 * -side + (side === -1 ? 0 : Math.PI), color: '#ffb05a', text: 'HOSHI', vertical: true, light: 26 });
+          neons.push({ pos: [fx - rx * side * 1.2, 6.0, fz - rz * side * 1.2], size: [1.3, 4.6], yaw, color: '#ffb05a', text: 'HOSHI', vertical: true, light: 26 });
           lights.push({ pos: [fx - rx * side * 2.5, 2.4, fz - rz * side * 2.5], color: '#ffa04a', intensity: 34, range: 14 });
           steam.push({ pos: [fx - rx * side * 1.0, 0.3, fz - rz * side * 1.0 + 2], radius: 0.6, height: 4, tint: '#ffb070' });
         } else if (kind < 0.55) {
@@ -118,9 +119,9 @@ export function buildSlice(): SliceWorld {
           const col = palette[Math.floor(R() * palette.length)];
           const along = (R() - 0.5) * (w - 3);
           const sx = fx + Math.sin(-yaw) * along * 0 - Math.sin(yaw) * -along - rx * side * 1.0, sz = fz - Math.cos(yaw) * along - rz * side * 1.0;
-          neons.push({ pos: [sx, 6 + R() * 8, sz], size: [1.2, 4 + R() * 3], yaw: yaw + Math.PI / 2, color: col, text: words[Math.floor(R() * words.length)], vertical: true, flicker: R() < 0.2 ? 0.7 : 0, light: 16 });
+          neons.push({ pos: [sx, 6 + R() * 8, sz], size: [1.2, 4 + R() * 3], yaw, color: col, text: words[Math.floor(R() * words.length)], vertical: true, flicker: R() < 0.2 ? 0.7 : 0, light: 16 });
         }
-        if (R() < 0.5) neons.push({ pos: [fx - rx * side * 0.25, 4.6 + R() * 1.5, fz - rz * side * 0.25], size: [Math.min(w - 2, 6), 1.2], yaw: faceYaw + Math.PI, color: palette[Math.floor(R() * palette.length)], text: words[Math.floor(R() * words.length)], light: 0 });
+        if (R() < 0.5) neons.push({ pos: [fx - rx * side * 0.25, 4.6 + R() * 1.5, fz - rz * side * 0.25], size: [Math.min(w - 2, 6), 1.2], yaw: fyaw, color: palette[Math.floor(R() * palette.length)], text: words[Math.floor(R() * words.length)], light: 0 });
         // AC units + balconies up the facade
         for (let k = 0; k < 4; k++) {
           const y = 5 + R() * Math.max(2, h - 8); if (y > h - 1) continue;
@@ -152,8 +153,12 @@ export function buildSlice(): SliceWorld {
     if (R() < 0.5) props.push({ kind: 'ac', pos: [x, 3 + R() * 6, alleyZ[0] + 0.05], yaw: 0, size: [0.9, 0.6, 0.5] });
     if (R() < 0.4) props.push({ kind: 'crate', pos: [x, 0.4, alleyZ[1] - 0.6], yaw: 0, size: [1, 0.8, 0.8] });
   }
-  for (const [sx, sz] of [[-30, 40], [-48, 37], [-74, 30], [-80, 50]]) { steam.push({ pos: [sx, 0.1, sz], radius: 0.8, height: 6 }); props.push({ kind: 'vent', pos: [sx, 0.1, sz], yaw: 0, size: [1.2, 0.2, 1.2] }); }
-  lights.push({ pos: [-40, 5.5, 40], color: '#ff4fb0', intensity: 18, range: 14 }, { pos: [-62, 6, 41], color: '#38e8ff', intensity: 16, range: 14 });
+  for (const [sx, sz] of [[-30, 40], [-48, 37], [-74, 30], [-80, 50]]) { steam.push({ pos: [sx, 0.1, sz], radius: 0.8, height: 6, tint: '#7f6a9a' }); props.push({ kind: 'vent', pos: [sx, 0.1, sz], yaw: 0, size: [1.2, 0.2, 1.2] }); }
+  lights.push({ pos: [-22, 4.5, 40], color: '#ffb36b', intensity: 24, range: 14 }, { pos: [-40, 5.5, 40], color: '#ff4fb0', intensity: 14, range: 12 }, { pos: [-62, 6, 41], color: '#38e8ff', intensity: 24, range: 14 });
+  for (const [x, z, col, txt, yy] of [[-30, alleyZ[1] - 0.2, '#ff2aa8', 'MAHJONG', Math.PI], [-46, alleyZ[0] + 0.2, '#ffa142', 'NOODLE', 0], [-66, alleyZ[1] - 0.2, '#4dff9a', 'CLINIC', Math.PI]] as [number, number, string, string, number][])
+    neons.push({ pos: [x, 4.2, z], size: [4.2, 1.1], yaw: yy, color: col, text: txt, light: 14 });
+  props.push({ kind: 'shopwin', pos: [-36, 1.5, alleyZ[1] - 0.05], yaw: Math.PI, size: [3, 2.2, 0], seed: 3.3 });
+  props.push({ kind: 'shopwin', pos: [-56, 1.5, alleyZ[0] + 0.05], yaw: 0, size: [2.4, 2.2, 0], seed: 7.7 });
   lights.push({ pos: [-78, 8, 40], color: '#ffb36b', intensity: 30, range: 18, cone: { dirYaw: 0, dirPitch: -Math.PI / 2, angle: 0.5 } });
   neons.push({ pos: [-85.8, 6, 40], size: [1.4, 5.5], yaw: Math.PI / 2, color: '#ff2aa8', text: 'BAR', vertical: true, light: 20 });
   neons.push({ pos: [-55, 5, alleyZ[0] + 0.2], size: [4, 1.1], yaw: 0, color: '#19e6ff', text: 'MODS', light: 10 });
@@ -194,14 +199,15 @@ export function buildSlice(): SliceWorld {
   // underside lights over the underpass (where the Skyway crosses the street)
   for (let z = -48; z > -84; z -= 6) lights.push({ pos: [SKY.x, SKY.y - 1.4, z], color: '#8ff0ff', intensity: 18, range: 12 });
   holos.push({ pos: [70, 34, -40], yaw: -Math.PI / 2 + 0.4, size: [22, 14], color: '#ff4fd0', kind: 'koi' });
+  holos.push({ pos: [6, 27, -58], yaw: 0.25, size: [18, 11], color: '#ff4fd0', kind: 'koi' });
   holos.push({ pos: [-24, 30, -20], yaw: Math.PI / 2 - 0.2, size: [10, 14], color: '#3fe6ff', kind: 'face' });
   holos.push({ pos: [58, 18, 70], yaw: -Math.PI / 2, size: [12, 6], color: '#ffa142', kind: 'ad' });
 
   // ---- plaza at the south end, boundary walls ----
   boxes.push(box(-20, 0, 112, 12, 0.15, 118, 'sidewalk', { collide: 'ground', surface: 'concrete' }));
-  for (const [x0, z0, x1, z1] of [[G.x0, G.z0, G.x1, G.z0 + 2], [G.x0, G.z1 - 2, G.x1, G.z1], [G.x0, G.z0, G.x0 + 2, G.z1], [G.x1 - 2, G.z0, G.x1, G.z1]]) boxes.push(box(x0, 0, z0, x1, 40, z1, 'facade', { lit: 0.25, seed: Math.floor(R() * 1e6) }));
+  if (!opts.embed) for (const [x0, z0, x1, z1] of [[G.x0, G.z0, G.x1, G.z0 + 2], [G.x0, G.z1 - 2, G.x1, G.z1], [G.x0, G.z0, G.x0 + 2, G.z1], [G.x1 - 2, G.z0, G.x1, G.z1]]) boxes.push(box(x0, 0, z0, x1, 40, z1, 'facade', { lit: 0.25, seed: Math.floor(R() * 1e6) }));
   // far skyline (render-only, no collision) to fill the fog with lit towers
-  for (let k = 0; k < 40; k++) {
+  for (let k = 0; k < (opts.embed ? 0 : 40); k++) {
     const a = R() * Math.PI * 2, d = 230 + R() * 140;
     const x = 20 + Math.cos(a) * d, z = -20 + Math.sin(a) * d, h = 40 + R() * 110, w = 14 + R() * 20;
     boxes.push(box(x - w / 2, 0, z - w / 2, x + w / 2, h, z + w / 2, R() < 0.5 ? 'facade' : 'facadeB', { lit: 0.35, seed: Math.floor(R() * 1e6), collide: 'none' }));
@@ -212,7 +218,7 @@ export function buildSlice(): SliceWorld {
   const W: SliceWorld = {
     boxes, neons, lights, dressing: { props, cables, steam, holos },
     spawn: { pos: [0, 1, 115], yaw: 0 },
-    anchors: {},
+    anchors: hoshiAt ? { hoshi: hoshiAt } : {},
     routes: {
       loop: { pts: [[0, 115], [0, 4], ...path.filter((p, i) => p.z < 0 && i % 4 === 0).map((p) => [p.x, p.z] as [number, number]), [60, -102]], targetTime: [0, 0] },
       skyway: { pts: [[SKY.x, 110], [SKY.x, SKY.zEnd + 2], [SKY.x, SKY.zDownEnd + 5]], targetTime: [0, 0] },

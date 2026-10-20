@@ -97,6 +97,7 @@ class Trail {
   }
   update(parent: THREE.Object3D, speed: number, _dt: number, on: boolean) {
     const p = this.local.clone().applyMatrix4(parent.matrixWorld);
+    if (this.pts.length && this.pts[0].distanceTo(p) > 4) this.pts.length = 0; // teleport / respawn: don't stretch a ribbon across the map
     this.pts.unshift(p); if (this.pts.length > this.N) this.pts.pop();
     const pos = this.geo.attributes.position as THREE.BufferAttribute;
     const w = 0.05;

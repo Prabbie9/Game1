@@ -5,8 +5,12 @@ import { Post, POST } from './renderer/post';
 import { U } from './materials/materials';
 import { buildTestArea } from './world/testarea';
 import { buildSlice, type SliceWorld } from './world/slice';
-import { buildProps, buildCables, buildSteam, buildHolos } from './world/kit';
-import { buildWorld, makeMaterials, LightPool } from './world/build';
+import { buildHolos } from './world/kit';
+import { makeMaterials, LightPool } from './world/build';
+import { buildStacks, type StacksWorld } from './world/stacks';
+import { ChunkStreamer } from './streaming/chunks';
+import { Crowds } from './crowds/crowds';
+import { Traffic, Tram } from './world/traffic';
 import { PhysicsClient } from './physics/client';
 import { InputSystem, KeyboardMouse } from './input/actions';
 import { BALANCED, PRESETS, cloneTuning, type Tuning } from './vehicle/tuning';
@@ -49,25 +53,27 @@ async function boot() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(68, W / H, 0.1, 900);
-  const worldName = params.get('world') ?? 'slice';
-  const world: WorldDef = worldName === 'test' ? buildTestArea() : buildSlice();
+  const worldName = params.get('world') ?? 'stacks';
+  const world: WorldDef = worldName === 'test' ? buildTestArea() : worldName === 'slice' ? buildSlice() : buildStacks();
   (window as any).__NC_WORLD = worldName;
   const atmo = new Atmosphere(scene, renderer, q.shadows);
-  scene.add(buildWorld(world, makeMaterials()));
+  const tuning: Tuning = cloneTuning(PRESETS[settings.preset] ?? BALANCED);
+  const physics = new PhysicsClient();
+  physics.onError = (m) => console.error(m);
+  const streamer = new ChunkStreamer(scene, world as SliceWorld, makeMaterials(), physics);
+  await physics.init(streamer.initialPhysics(world.spawn.pos[0], world.spawn.pos[2]), world.spawn.pos, world.spawn.yaw, tuning);
+  streamer.update(new THREE.Vector3(...world.spawn.pos), new THREE.Vector3(...world.spawn.pos), true);
   const dressing = (world as SliceWorld).dressing;
-  if (dressing) {
-    scene.add(buildProps(dressing.props)); scene.add(buildCables(dressing.cables));
-    scene.add(buildSteam(dressing.steam)); scene.add(buildHolos(dressing.holos));
-  }
+  if (dressing) scene.add(buildHolos(dressing.holos));
+  const SW = world as StacksWorld;
+  if (SW.walk) scene.add(new Crowds(SW.walk, q.tier === 'low' ? 0.025 : q.tier === 'medium' ? 0.04 : 0.055).group);
+  if (SW.lanes) scene.add(new Traffic(SW.lanes).group);
+  const tram = SW.tram ? new Tram(scene, new THREE.Vector3(...SW.tram.a), new THREE.Vector3(...SW.tram.b)) : null;
   const pool = new LightPool(scene, q.lightPool, world.lights, world.neons);
   const rain = new Rain(scene, q.rain);
   const bike = new BikeModel(scene, q.tier === 'high');
   const post = new Post(renderer, scene, camera, q.post);
 
-  const tuning: Tuning = cloneTuning(PRESETS[settings.preset] ?? BALANCED);
-  const physics = new PhysicsClient();
-  physics.onError = (m) => console.error(m);
-  await physics.init({ world: world.boxes }, world.spawn.pos, world.spawn.yaw, tuning);
 
   const input = new InputSystem();
   const km = new KeyboardMouse(renderer.domElement);
@@ -103,8 +109,9 @@ async function boot() {
     timeOfDay = h;
     const night = h >= 21 || h < 5 ? 1 : h >= 19 ? (h - 19) / 2 : 0.0;
     U.night.value = night;
+    atmo.fogDensity.value = 0.012 + (1 - night) * 0.003;
     atmo.fogColor.value.setRGB(0.018 + (1 - night) * 0.09, 0.022 + (1 - night) * 0.05, 0.05 + (1 - night) * 0.12);
-    atmo.hazeColor.value.setRGB(0.16 + (1 - night) * 0.5, 0.045 + (1 - night) * 0.18, 0.16 + (1 - night) * 0.15);
+    atmo.hazeColor.value.setRGB(0.16 + (1 - night) * 0.32, 0.045 + (1 - night) * 0.14, 0.16 + (1 - night) * 0.05);
     atmo.moon.intensity = 0.25 + (1 - night) * 0.9;
     atmo.hemi.intensity = 0.1 + (1 - night) * 0.5;
     scene.environmentIntensity = 0.3 + (1 - night) * 0.4;
@@ -121,7 +128,7 @@ async function boot() {
       const s = [...ft].sort((a, b) => a - b);
       const info = renderer.info as any;
       return { backend, frames, drawCalls: info.render?.drawCalls ?? info.render?.calls, triangles: info.render?.triangles, geometries: info.memory?.geometries, textures: info.memory?.textures,
-        frameMsP50: s[Math.floor(s.length * 0.5)] ?? 0, frameMsP99: s[Math.floor(s.length * 0.99)] ?? 0, heapMB: (performance as any).memory ? Math.round((performance as any).memory.usedJSHeapSize / 1048576) : null,
+        streaming: streamer.stats(), frameMsP50: s[Math.floor(s.length * 0.5)] ?? 0, frameMsP99: s[Math.floor(s.length * 0.99)] ?? 0, heapMB: (performance as any).memory ? Math.round((performance as any).memory.usedJSHeapSize / 1048576) : null,
         speed: simState.speed, pos: [simState.x, simState.y, simState.z] };
     },
     frameCount: () => frames, renderFrame: () => post.render(), hud: (v) => ui.setHudVisible(v),
@@ -189,6 +196,8 @@ async function boot() {
 
     rain.update(camera.position, camVel, simState.grounded ? simState.y - simState.groundDist : 0, rainAmt);
     pool.update(camera.position);
+    streamer.update(camera.position, new THREE.Vector3(simState.x, simState.y, simState.z));
+    tram?.update(t);
     atmo.follow(new THREE.Vector3(simState.x, simState.y, simState.z));
     // covered = under the tunnel roof or the deck (cheap analytic test for audio)
     const covered = worldName === 'test'

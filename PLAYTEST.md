@@ -32,3 +32,23 @@ Questions for a human (M1):
 3. Do drifts (Space + steer) feel controllable, and is the boost you earn from them worth doing?
 4. When you hit a wall, does sliding along it feel fair, or does it feel like the game is driving for you?
 5. Can you read the road edges and the hazard bollards at speed in rain and fog? What annoyed you?
+
+## M2 — Playable look slice (Hoshi Street)
+**Status: bot proxies PASS. UNPLAYED: needs human.**
+Vehicle proxies unchanged from M1 (same sim; all presets pass, see above). Slice routes (Balanced, `tools/fungate.ts` §7):
+
+| Route | Time | Band | Wall dead-stops | Camera clips | Notes |
+|---|---|---|---|---|---|
+| loop (plaza → street → bend → NE) | 10.8 s | 7–15 s | 0 | 0 | |
+| skyway (ramp up, deck, ramp down) | 7.6 s | 7–15 s | 0 | 0 | max height 10.9 m |
+| canal (ramp in, skim, ramp out) | 8.3 s | 5–10 s | 0 | 0 | 3.6 s on water |
+
+Bot-found and fixed in M2: buildings partly inside the Skyway corridor blocked the deck (now low roofs pass under); canal ramps had ledges above the water line that snagged and trapped the camera (ramps now start submerged; amber edge strips mark the exit ramp sides).
+Readability (shots/m2r3_*): crushed 0 %, clipped ≤ 0.02 %, road local contrast 0.046–0.083; kerb strips + amber bollards visible in every shot.
+
+Questions for a human (M2):
+1. Driving down Hoshi Street at night: does it feel like a place? What's the first thing your eye goes to?
+2. Can you read the road, the bend and the kerbs at full speed in the rain, or does the glow/blur get in the way?
+3. Is skimming the canal fun, and was it obvious how to get in and out?
+4. The Skyway ramp and underpass: did the jump between street level and the elevated lane feel good?
+5. Do the engine, rain and city sounds match what you see? Anything grating?

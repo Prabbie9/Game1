@@ -8,7 +8,8 @@ export interface ShotDef {
   cam?: { pos: [number, number, number]; look: [number, number, number]; fov?: number };
   bike?: { pos: [number, number, number]; yaw: number; speed?: number };
   bot?: { pts: [number, number][]; hops?: [number, number][] };
-  warm: number; // frames to settle (motion shots: frames of driving before capture)
+  warm: number; // frames to settle (TRAA history)
+  warmSec?: number; // motion shots: seconds of driving before capture
 }
 
 // Grey-box (M1) framings, used with ?world=test.
@@ -30,8 +31,8 @@ export const SLICE_SHOTS: Record<string, ShotDef> = {
   '3': { title: 'Steamy alley', time: 23.6, cam: { pos: [-13, 1.8, 41.5], look: [-60, 4.5, 39.5], fov: 55 }, bike: { pos: [-25, 1, 40], yaw: Math.PI / 2 }, warm: 30 },
   '4': { title: 'Wet-road neon reflection', time: 23.6, cam: { pos: [-3.5, 0.45, 76], look: [-1, 1.6, 52], fov: 50 }, bike: { pos: [2.5, 1, 66], yaw: 0.15 }, warm: 30 },
   '5': { title: 'Storefront window glow', time: 23.6, cam: { pos: [3.5, 1.9, 67], look: [-10, 2.6, 58.5], fov: 50 }, bike: { pos: [-3.2, 1, 61.5], yaw: 0.5 }, warm: 30 },
-  '6': { title: 'Elevated lane at speed', time: 23.6, bike: { pos: [35, 11, 50], yaw: 0, speed: 30 }, bot: { pts: [[35, 50], [35, -96], [35, -140]] }, warm: 70 },
-  '7': { title: 'Underpass at speed', time: 23.6, bike: { pos: [12.5, 1, -33], yaw: A, speed: 26 }, bot: { pts: [[12.5, -33], [60.7, -102.4], [70, -115]] }, warm: 70 },
+  '6': { title: 'Elevated lane at speed', time: 23.6, bike: { pos: [35, 11, 50], yaw: 0, speed: 30 }, bot: { pts: [[35, 50], [35, -96], [35, -140]] }, warm: 12, warmSec: 1.6 },
+  '7': { title: 'Underpass at speed', time: 23.6, bike: { pos: [12.5, 1, -33], yaw: A, speed: 26 }, bot: { pts: [[12.5, -33], [60.7, -102.4], [70, -115]] }, warm: 12, warmSec: 1.45 },
 };
 export const SHOTS = new Proxy({} as Record<string, ShotDef>, {
   get: (_t, k: string) => ((window as any).__NC_WORLD === 'test' ? TEST_SHOTS : SLICE_SHOTS)[k],
@@ -46,9 +47,18 @@ export async function setupShot(g: Game, id: string) {
   g.setTime(s.time); g.setRain(new URLSearchParams(location.search).has('rain') ? +new URLSearchParams(location.search).get('rain')! : s.rain ?? 1); g.hud(false);
   g.setBot(null); g.releaseCam();
   if (s.bike) g.physics.teleport(s.bike.pos[0], s.bike.pos[1], s.bike.pos[2], s.bike.yaw, s.bike.speed ?? 0);
-  if (s.cam) g.freezeCam(s.cam.pos, s.cam.look, s.cam.fov);
+  let cam = s.cam;
+  const h = g.world.anchors.hoshi;
+  if (id === '5' && h && (window as any).__NC_WORLD !== 'test') { // frame the noodle bar wherever the layout put it
+    const nx = Math.sin(h.yaw), nz = Math.cos(h.yaw);
+    cam = { pos: [h.pos[0] + nx * 12 + nz * 7, 1.9, h.pos[2] + nz * 12 - nx * 7], look: [h.pos[0], 2.6, h.pos[2]], fov: 50 };
+    g.physics.teleport(h.pos[0] + nx * 6.5, 1, h.pos[2] + nz * 6.5 + 3, 0.5);
+  }
+  if (cam) g.freezeCam(cam.pos, cam.look, cam.fov);
   if (s.bot) g.setBot(new Bot({ pts: s.bot.pts, hops: s.bot.hops, useDrift: false }));
+  const t0 = performance.now();
   await wait(s.warm, g);
+  while (s.warmSec && performance.now() - t0 < s.warmSec * 1000) await wait(1, g);
   (window as any).__SHOT_READY = true;
 }
 
@@ -86,6 +96,10 @@ export async function saveReferenceShots(g: Game) {
   files.push({ name: 'stats.json', data: new TextEncoder().encode(JSON.stringify({ ...g.stats(), ua: navigator.userAgent, when: new Date().toISOString() }, null, 1)) });
   g.setBot(null); g.releaseCam(); g.hud(true); g.setTime(23.5);
   g.physics.teleport(st.x, st.y, st.z, st.yaw);
-  const a = document.createElement('a'); a.href = URL.createObjectURL(zip(files)); a.download = 'night-courier-reference-shots.zip';
+  const blob = zip(files), filename = 'night-courier-reference-shots.zip';
+  // hosted (claude.ai artifact): the viewer's downloads capability; offline file: a plain download link
+  const dl = await (window as any).claude?.use?.('downloads').catch(() => null);
+  if (dl) { try { await dl.save({ filename, data: blob }); } catch (e) { console.warn('save declined', e); } return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
 }

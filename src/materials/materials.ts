@@ -42,7 +42,7 @@ export interface GroundOpts { base: number; tint?: [number, number, number]; pud
 
 /** Wet ground: asphalt / sidewalk / deck. */
 export function wetGround(o: GroundOpts) {
-  const m = new THREE.MeshStandardNodeMaterial();
+  const m = new THREE.MeshPhysicalNodeMaterial();
   const p = positionWorld.xz;
   const big = mx_fractal_noise_float(vec3(p.x.mul(0.035), float(1.3), p.y.mul(0.035)), 3, 2.0, 0.5, 1.0);
   const small = n2(p.mul(0.9));
@@ -61,6 +61,11 @@ export function wetGround(o: GroundOpts) {
   m.metalnessNode = float(0.0);
   const h = rippleHeight(p).mul(pud).mul(0.012).add(grain.mul(0.004).mul(float(1).sub(pud)));
   m.normalNode = bumpMap(h, float(1.0));
+  // oily sheen: thin-film iridescence in patches of the puddles
+  const oil = smoothstep(0.2, 0.6, mx_noise_float(vec3(p.x.mul(0.25), 7.0, p.y.mul(0.25)))).mul(pud);
+  m.iridescenceNode = oil.mul(0.8);
+  m.iridescenceIOR = 1.35;
+  m.iridescenceThicknessNode = mx_noise_float(vec3(p.x.mul(0.6), 3.0, p.y.mul(0.6))).mul(250).add(450);
   return m;
 }
 
@@ -91,7 +96,8 @@ export function facade(variant: 'panel' | 'brick') {
   const warm = vec3(1.0, 0.55, 0.22), cool = vec3(0.55, 0.85, 1.0), mag = vec3(1.0, 0.3, 0.75);
   const interior = mix(mix(warm, cool, step(0.62, r2)), mag, step(0.9, r2));
   const curtain = mix(float(1), smoothstep(0.2, 0.9, fv).mul(0.7).add(0.3), step(0.5, r3));
-  const winGlow = interior.mul(curtain).mul(r3.mul(r3).mul(1.6).add(0.15)).mul(lit);
+  const tv = step(0.93, r2).mul(sin(U.time.mul(7.0).add(r.mul(40.0))).mul(0.25).add(0.75).mul(U.flicker).add(float(1).sub(U.flicker)));
+  const winGlow = interior.mul(curtain).mul(r3.mul(r3).mul(1.6).add(0.15)).mul(lit).mul(mix(float(1), tv, step(0.93, r2)));
   // wall surface
   const grime = mx_fractal_noise_float(vec3(u.mul(0.6), y.mul(0.05), seed), 3, 2.0, 0.5, 1.0);
   const streak = n2(vec2(u.mul(3.0), y.mul(0.08).add(seed))).mul(0.5).add(0.5);
@@ -105,7 +111,14 @@ export function facade(variant: 'panel' | 'brick') {
     const panel = step(0.97, fract(u.div(1.5))).max(step(0.97, fract(y.div(1.7))));
     wall = mix(vec3(0.16, 0.165, 0.18), vec3(0.07, 0.07, 0.08), panel);
   }
-  const wallCol = wall.mul(float(0.75).add(grime.mul(0.35))).mul(mix(float(1), streak.mul(0.5).add(0.55), U.wet));
+  // per-building tint (concrete grey / teal / rust / cream) so blocks don't read as one brown slab
+  const bt = fract(sin(cs.mul(91.7)).mul(43758.5453));
+  const tint = mix(mix(vec3(0.85, 0.9, 1.0), vec3(0.55, 0.85, 0.85), step(0.35, bt)), mix(vec3(1.15, 0.75, 0.6), vec3(1.2, 1.1, 0.9), step(0.85, bt)), step(0.6, bt));
+  // floor ledges + pilasters + dark frame around each window opening
+  const ledge = smoothstep(0.035, 0.0, abs(fv.sub(0.04))).mul(vertical);
+  const frame = winU.mul(winV).oneMinus().mul(smoothstep(0.18, 0.22, fu).mul(smoothstep(0.82, 0.78, fu)).mul(smoothstep(0.26, 0.3, fv)).mul(smoothstep(0.82, 0.78, fv)));
+  const wallCol = wall.mul(tint).mul(float(0.75).add(grime.mul(0.35))).mul(mix(float(1), streak.mul(0.5).add(0.55), U.wet))
+    .mul(float(1).sub(ledge.mul(0.45))).mul(float(1).sub(frame.mul(0.6)));
   const glass = vec3(0.02, 0.025, 0.03);
   // roofs (horizontal faces): dark tar
   const roof = vec3(0.05, 0.05, 0.055).mul(float(1).add(grime.mul(0.3)));
@@ -166,7 +179,7 @@ export function emissive(col: number, strength: number) {
 
 /** Neon sign face: canvas texture as emissive with tube flicker. */
 export function neon(tex: THREE.Texture, col: THREE.Color, strength: number, flicker: number, seed: number) {
-  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
+  const m = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const { texture: tx, uv } = THREE.TSL as any;
   const s = tx(tex, uv());
   const fl = float(1).sub(step(0.82, mx_noise_float(vec3(U.time.mul(9.0), seed, 0))).mul(flicker).mul(U.flicker).mul(0.85));

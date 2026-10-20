@@ -37,11 +37,12 @@ function shopGlassMat() {
   const shelves = step(0.92, fract(u.y.mul(4.0))).mul(0.6);
   const people = smoothstep(0.35, 0.3, abs(fract(u.x.mul(3.0).add(s.mul(0.37))).sub(0.5))).mul(step(u.y, float(0.55))).mul(step(0.5, fract(s.mul(3.7))));
   const hue = fract(s.mul(0.618));
-  const warm = mix(vec3(1.0, 0.62, 0.3), vec3(0.6, 0.9, 1.0), step(0.7, hue));
+  const warm = mix(mix(vec3(0.25, 0.75, 0.7), vec3(0.35, 0.5, 1.0), step(0.4, hue)), vec3(0.85, 0.35, 0.9), step(0.75, hue)); // other shops stay cool/teal/violet so Hoshi is the warm focal point
   const glow = warm.mul(float(1).sub(shelves).sub(people.mul(0.85))).mul(smoothstep(0.0, 0.6, u.y).mul(0.5).add(0.7));
   m.colorNode = vec3(0.02, 0.02, 0.025);
   m.roughnessNode = float(0.06); m.metalnessNode = float(0.3);
-  m.emissiveNode = glow.mul(2.2);
+  m.emissiveNode = glow.mul(fract(s.mul(1.37)).mul(0.3).add(0.12));
+  m.metalnessNode = float(0.0); m.roughnessNode = float(0.12);
   return m;
 }
 /** The one warm window (Hoshi noodle bar): brighter, amber, with steam haze rising inside. */
@@ -51,9 +52,9 @@ function warmWinMat() {
   const haze = mx_noise_float(vec3(u.x.mul(5.0), u.y.mul(3.0).sub(time.mul(0.4)), 1.3)).mul(0.5).add(0.5);
   const counter = step(u.y, float(0.3));
   const silh = smoothstep(0.12, 0.08, abs(fract(u.x.mul(2.5)).sub(0.5))).mul(step(u.y, float(0.62))).mul(step(float(0.3), u.y));
-  const glow = vec3(1.0, 0.55, 0.2).mul(float(1.2).add(haze.mul(0.6))).mul(float(1).sub(silh.mul(0.9))).mul(mix(float(1), float(0.55), counter));
+  const glow = vec3(1.0, 0.42, 0.12).mul(float(0.8).add(haze.mul(0.5))).mul(float(1).sub(silh.mul(0.95))).mul(mix(float(1), float(0.55), counter));
   m.colorNode = vec3(0.02, 0.015, 0.01); m.roughnessNode = float(0.05); m.metalnessNode = float(0.2);
-  m.emissiveNode = glow.mul(4.0);
+  m.emissiveNode = glow.mul(1.05);
   return m;
 }
 function corrugated(col: number) {
@@ -203,7 +204,7 @@ export function buildSteam(defs: SteamDef[]) {
   m.positionNode = center.add(right.mul(cn.x.mul(size))).add(up.mul(cn.y.mul(size)));
   const r = length(cn);
   const puff = smoothstep(1.0, 0.1, r).mul(mx_noise_float(vec3(cn.mul(1.5).add(sd.xy.mul(10.0)), time.mul(0.2))).mul(0.4).add(0.6));
-  const alpha = puff.mul(smoothstep(0.0, 0.15, life)).mul(float(1).sub(life)).mul(0.11);
+  const alpha = puff.mul(smoothstep(0.0, 0.15, life)).mul(float(1).sub(life)).mul(0.06);
   m.colorNode = tn.mul(alpha).mul(distFade());
   const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 7;
   return mesh;

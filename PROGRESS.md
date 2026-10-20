@@ -1,9 +1,10 @@
 # PROGRESS
-NEXT STEP: M2: build dist, capture slice shots 1-7 (node tools/shots.mjs dist shots/m2r1_ shot=1 ... shot=7), list defects, fix (round 1 of 3).
+NEXT STEP: M3: build dist with Stacks world (default), run nosplash headless, fix errors, then bot drive frame-time check (tools/stability.mjs).
 
-PLAYABLE BUILD: M1 checkpoint — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline single file builds/play/NightCourier.html (double-click). Known-good: builds/known-good/.
+PLAYABLE BUILD: M2 checkpoint — hosted https://claude.ai/artifact/57iTMnatcL6jW9GvczB5VV ; offline builds/play/NightCourier.html (double-click). Known-good: builds/known-good/.
 
 ## Done
+- M2: look slice (Hoshi Street), 3 look rounds, checkpoint builds/M2-checkpoint (smoke OK on file://).
 - M1: feel grey-box + mood test, gates self-checked, checkpoint builds/M1-checkpoint (smoke OK on file://).
 - M0: environment tested, delivery test built (hosted + single-file), effect check (DESIGN.md), SPEC/RULES/DESIGN/PLAYTEST/CREDITS written.
 
@@ -24,8 +25,15 @@ PLAYABLE BUILD: M1 checkpoint — hosted https://claude.ai/artifact/57iTMnatcL6j
 - Frame time: SwiftShader headless ≈ 100 ms/frame flat (p99 = p50), ~150 draw calls, 35 k tris. Not real fps.
 - Remaining rough: grey-box facades read as flat brown slabs; motion captures at 10 fps exaggerate TRAA/motion-blur ghosting (UNVERIFIED on real GPU).
 
+## M2 report (look slice: Hoshi Street)
+- Built: 220 m street with 35° bend, alley + steamy courtyard with laundry, Black Canal (drivable water, ramps), Skyway elevated lane with underpass, Hoshi noodle bar (warm focal window, lanterns, sign), blade/flat neon signs, shopfronts, shutters, awnings, AC units, cables, holograms, oily puddle iridescence, per-building facade tints, TV-flicker windows, city ambience audio.
+- FUN GATE: PASS (bot proxies; see PLAYTEST.md). UNPLAYED: needs human.
+- LOOK GATE: 3 rounds (cap). Round 1 defects: teleport stretched light trails into giant beams; storefront/sign planes faced into walls; blade signs edge-on; alley too dark + white steam blob; hologram out of frame; milky haze. Round 2: shop windows blown to white slabs, alley over-magenta, dusk haze. Round 3: shop glass dimmed + cool tints so Hoshi is the only warm window; shot 5 anchored to Hoshi. Sheets: shots/m2r1_sheet.png (before) → shots/m2r3_sheet.png + shots/m2r3b_sheet.png (after).
+- Checklist honest read: long neon streak reflections YES; no crushed/clipped YES; bloom readable YES; distinct light shafts PARTIAL (lamp cones subtle; true volumetric UNVERIFIED/not enabled); materials distinct PARTIAL (asphalt/brick/metal differ, facades still simple); no visible tiling YES (all world-space procedural); flat-lit surfaces PARTIAL (block faces away from lights are flat); focal point YES (Hoshi); scale consistent YES; readable at speed YES. Target "prestige film still": not reached — reads as a stylised indie night city.
+- Motion captures run at ~10 fps headless → TRAA/motion blur ghosting exaggerated; UNVERIFIED on real GPU.
+
 ## In progress
-- M2 look slice (src/world/slice.ts, src/world/kit.ts written, not wired yet)
+- M3 streaming + The Stacks (crowds.ts, traffic.ts written, not wired)
 
 ## Decisions
 - three r186 (WebGPURenderer + RenderPipeline), Rapier compat 0.21 in a worker, Vite 7, TS 5.9.

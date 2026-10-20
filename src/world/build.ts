@@ -18,7 +18,7 @@ export function makeMaterials(): Record<MatId, THREE.Material> {
 
 const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpE = new THREE.Euler(0, 0, 0, 'YXZ');
 
-function boxGeom(b: BoxDef) {
+export function boxGeomFor(b: BoxDef) {
   const g = new THREE.BoxGeometry(b.h[0] * 2, b.h[1] * 2, b.h[2] * 2);
   tmpE.set(b.pitch ?? 0, b.yaw ?? 0, 0, 'YXZ'); tmpQ.setFromEuler(tmpE);
   tmpM.compose(new THREE.Vector3(...b.c), tmpQ, new THREE.Vector3(1, 1, 1));
@@ -50,7 +50,7 @@ export function mergeGeoms(gs: THREE.BufferGeometry[]): THREE.BufferGeometry {
 }
 
 /** Thin emissive strips along sidewalk slab edges: road edges stay readable through fog, rain and bloom. */
-function kerbStrips(boxes: BoxDef[]) {
+export function kerbStripsFor(boxes: BoxDef[]) {
   const gs: THREE.BufferGeometry[] = [];
   for (const b of boxes) {
     if (b.mat !== 'sidewalk') continue;
@@ -159,7 +159,7 @@ export function buildWorld(W: WorldDef, mats: Record<MatId, THREE.Material>) {
   const byMat = new Map<MatId, THREE.BufferGeometry[]>();
   for (const b of W.boxes) {
     if (!byMat.has(b.mat)) byMat.set(b.mat, []);
-    byMat.get(b.mat)!.push(boxGeom(b));
+    byMat.get(b.mat)!.push(boxGeomFor(b));
   }
   for (const [mat, gs] of byMat) {
     const mesh = new THREE.Mesh(mergeGeoms(gs), mats[mat]);
@@ -167,7 +167,7 @@ export function buildWorld(W: WorldDef, mats: Record<MatId, THREE.Material>) {
     mesh.name = 'w_' + mat;
     group.add(mesh);
   }
-  const kerb = kerbStrips(W.boxes);
+  const kerb = kerbStripsFor(W.boxes);
   if (kerb) group.add(new THREE.Mesh(kerb, M.emissive(0x2fdcff, 1.4)));
   // tunnel light strips
   group.add(buildNeons(W.neons));
